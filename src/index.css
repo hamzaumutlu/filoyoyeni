@@ -156,3 +156,16 @@ th, td {
   color: var(--color-accent-orange);
   background: rgba(255, 87, 34, 0.1);
 }
+
+/* Safe Area for iPhone notch */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Mobile Bottom Navigation */
+@media (max-width: 767px) {
+  .mobile-nav-active {
+    color: var(--color-accent-orange);
+  }
+}
+
