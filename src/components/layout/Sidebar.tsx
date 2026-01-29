@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard,
     Building2,
@@ -12,13 +12,17 @@ import {
     ChevronRight,
     Zap,
     Search,
+    LogOut,
+    UserCog,
 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface NavItem {
     icon: React.ElementType;
     label: string;
     path: string;
     badge?: number;
+    adminOnly?: boolean;
 }
 
 const mainNavItems: NavItem[] = [
@@ -28,6 +32,7 @@ const mainNavItems: NavItem[] = [
     { icon: Settings2, label: 'Yöntemler', path: '/methods' },
     { icon: FileSpreadsheet, label: 'Veri Girişi', path: '/data-entry' },
     { icon: CreditCard, label: 'Ödemeler', path: '/payments' },
+    { icon: UserCog, label: 'Kullanıcılar', path: '/users', adminOnly: true },
 ];
 
 const bottomNavItems: NavItem[] = [
@@ -41,6 +46,16 @@ interface SidebarProps {
 
 export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
     const [searchQuery, setSearchQuery] = useState('');
+    const { user, logout, isAdmin } = useAuth();
+    const navigate = useNavigate();
+
+    const handleLogout = async () => {
+        await logout();
+        navigate('/login');
+    };
+
+    // Filter nav items based on user role
+    const filteredNavItems = mainNavItems.filter(item => !item.adminOnly || isAdmin);
 
     return (
         <aside
@@ -88,7 +103,7 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
             {/* Main Navigation */}
             <nav className="flex-1 px-3 py-2 overflow-y-auto">
                 <ul className="space-y-1">
-                    {mainNavItems.map((item) => (
+                    {filteredNavItems.map((item) => (
                         <li key={item.path}>
                             <NavLink
                                 to={item.path}
@@ -143,9 +158,42 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                             </NavLink>
                         </li>
                     ))}
+                    {/* Logout Button */}
+                    <li>
+                        <button
+                            onClick={handleLogout}
+                            className={`
+                  w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
+                  transition-all duration-200
+                  text-[var(--color-text-secondary)] hover:bg-[var(--color-accent-red)]/10 hover:text-[var(--color-accent-red)]
+                  ${isCollapsed ? 'justify-center' : ''}
+                `}
+                        >
+                            <LogOut className="w-5 h-5 flex-shrink-0" />
+                            {!isCollapsed && (
+                                <span className="text-sm font-medium">Çıkış</span>
+                            )}
+                        </button>
+                    </li>
                 </ul>
             </div>
 
+            {/* User Info */}
+            {!isCollapsed && user && (
+                <div className="px-4 py-3 border-t border-[var(--color-border-glass)]">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl gradient-orange flex items-center justify-center text-white font-semibold text-sm">
+                            {user.email.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                            <p className="text-sm font-medium text-white truncate">{user.email}</p>
+                            <p className="text-xs text-[var(--color-text-muted)] capitalize">
+                                {user.role === 'super_admin' ? 'Süper Admin' : user.role === 'admin' ? 'Admin' : 'Kullanıcı'}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Collapse Toggle */}
             <button
