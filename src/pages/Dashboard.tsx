@@ -1,6 +1,5 @@
 import {
     ArrowUpRight,
-    ArrowDownRight,
     Wallet,
     PiggyBank,
     TrendingUp,
@@ -16,8 +15,6 @@ import {
     CartesianGrid,
     Tooltip,
     ResponsiveContainer,
-    BarChart,
-    Bar,
 } from 'recharts';
 import { MainLayout } from '../components/layout';
 import { Card } from '../components/ui';
@@ -227,7 +224,7 @@ export default function Dashboard() {
                                         borderRadius: '12px',
                                         color: '#fff',
                                     }}
-                                    formatter={(value: number) => [`₺${value.toLocaleString()}`, 'Nakit Akışı']}
+                                    formatter={(value) => [`₺${(value as number)?.toLocaleString() ?? 0}`, 'Nakit Akışı']}
                                 />
                                 <Area
                                     type="monotone"
@@ -298,8 +295,8 @@ export default function Dashboard() {
                                     <td className="py-4 px-4 text-white font-medium">{activity.price}</td>
                                     <td className="py-4 px-4">
                                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${activity.status === 'Tamamlandı'
-                                                ? 'text-[var(--color-accent-green)] bg-[var(--color-accent-green)]/10'
-                                                : 'text-[var(--color-accent-orange)] bg-[var(--color-accent-orange)]/10'
+                                            ? 'text-[var(--color-accent-green)] bg-[var(--color-accent-green)]/10'
+                                            : 'text-[var(--color-accent-orange)] bg-[var(--color-accent-orange)]/10'
                                             }`}>
                                             • {activity.status}
                                         </span>
