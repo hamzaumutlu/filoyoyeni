@@ -7,6 +7,7 @@ import {
     Trash2,
     Link2,
     Percent,
+    Loader2,
 } from 'lucide-react';
 import {
     useReactTable,
@@ -17,40 +18,7 @@ import {
 } from '@tanstack/react-table';
 import { MainLayout } from '../components/layout';
 import { Card, Button, Modal, Input } from '../components/ui';
-import type { Method } from '../types';
-
-// Mock data
-const mockMethods: Method[] = [
-    {
-        id: '1',
-        name: 'Yolcu360',
-        entryCommission: 2.5,
-        exitCommission: 1.5,
-        deliveryCommission: 3.0,
-        openingBalance: 50000,
-        groupChatLink: 'https://wa.me/905551234567',
-        status: 'active',
-    },
-    {
-        id: '2',
-        name: 'Enuygun',
-        entryCommission: 2.0,
-        exitCommission: 1.0,
-        deliveryCommission: 2.5,
-        openingBalance: 35000,
-        groupChatLink: 'https://wa.me/905559876543',
-        status: 'active',
-    },
-    {
-        id: '3',
-        name: 'BiTaksi',
-        entryCommission: 3.0,
-        exitCommission: 2.0,
-        deliveryCommission: 2.0,
-        openingBalance: 20000,
-        status: 'inactive',
-    },
-];
+import { useMethodsSupabase, type MethodData } from '../hooks/useSupabase';
 
 interface FormData {
     name: string;
@@ -62,10 +30,11 @@ interface FormData {
 }
 
 export default function Methods() {
-    const [methods, setMethods] = useState<Method[]>(mockMethods);
+    const { methods, loading, addMethod, updateMethod, deleteMethod } = useMethodsSupabase();
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingMethod, setEditingMethod] = useState<Method | null>(null);
+    const [editingMethod, setEditingMethod] = useState<MethodData | null>(null);
     const [globalFilter, setGlobalFilter] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [formData, setFormData] = useState<FormData>({
         name: '',
         entryCommission: '',
@@ -75,7 +44,7 @@ export default function Methods() {
         groupChatLink: '',
     });
 
-    const columns: ColumnDef<Method>[] = [
+    const columns: ColumnDef<MethodData>[] = [
         {
             accessorKey: 'name',
             header: 'Yöntem Adı',
@@ -193,7 +162,7 @@ export default function Methods() {
         onGlobalFilterChange: setGlobalFilter,
     });
 
-    const handleEdit = (method: Method) => {
+    const handleEdit = (method: MethodData) => {
         setEditingMethod(method);
         setFormData({
             name: method.name,
@@ -206,46 +175,48 @@ export default function Methods() {
         setIsModalOpen(true);
     };
 
-    const handleDelete = (id: string) => {
-        setMethods(methods.filter((m) => m.id !== id));
+    const handleDelete = async (id: string) => {
+        if (!confirm('Bu yöntemi silmek istediğinize emin misiniz?')) return;
+        try {
+            await deleteMethod(id);
+        } catch (err) {
+            alert('Silme işlemi başarısız: ' + (err instanceof Error ? err.message : 'Bilinmeyen hata'));
+        }
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setIsSubmitting(true);
 
-        if (editingMethod) {
-            // Update existing
-            setMethods(
-                methods.map((m) =>
-                    m.id === editingMethod.id
-                        ? {
-                            ...m,
-                            name: formData.name,
-                            entryCommission: parseFloat(formData.entryCommission),
-                            exitCommission: parseFloat(formData.exitCommission),
-                            deliveryCommission: parseFloat(formData.deliveryCommission),
-                            openingBalance: parseFloat(formData.openingBalance),
-                            groupChatLink: formData.groupChatLink || undefined,
-                        }
-                        : m
-                )
-            );
-        } else {
-            // Add new
-            const newMethod: Method = {
-                id: Date.now().toString(),
-                name: formData.name,
-                entryCommission: parseFloat(formData.entryCommission),
-                exitCommission: parseFloat(formData.exitCommission),
-                deliveryCommission: parseFloat(formData.deliveryCommission),
-                openingBalance: parseFloat(formData.openingBalance),
-                groupChatLink: formData.groupChatLink || undefined,
-                status: 'active',
-            };
-            setMethods([...methods, newMethod]);
+        try {
+            if (editingMethod) {
+                // Update existing
+                await updateMethod(editingMethod.id, {
+                    name: formData.name,
+                    entryCommission: parseFloat(formData.entryCommission),
+                    exitCommission: parseFloat(formData.exitCommission),
+                    deliveryCommission: parseFloat(formData.deliveryCommission),
+                    openingBalance: parseFloat(formData.openingBalance),
+                    groupChatLink: formData.groupChatLink || undefined,
+                });
+            } else {
+                // Add new
+                await addMethod({
+                    name: formData.name,
+                    entryCommission: parseFloat(formData.entryCommission),
+                    exitCommission: parseFloat(formData.exitCommission),
+                    deliveryCommission: parseFloat(formData.deliveryCommission),
+                    openingBalance: parseFloat(formData.openingBalance),
+                    groupChatLink: formData.groupChatLink || undefined,
+                    status: 'active',
+                });
+            }
+            resetForm();
+        } catch (err) {
+            alert('İşlem başarısız: ' + (err instanceof Error ? err.message : 'Bilinmeyen hata'));
+        } finally {
+            setIsSubmitting(false);
         }
-
-        resetForm();
     };
 
     const resetForm = () => {
@@ -286,7 +257,9 @@ export default function Methods() {
                         </div>
                         <div>
                             <p className="text-[var(--color-text-secondary)] text-sm">Ortalama Giriş</p>
-                            <p className="text-xl font-bold text-white">%2.5</p>
+                            <p className="text-xl font-bold text-white">
+                                %{methods.length > 0 ? (methods.reduce((sum, m) => sum + m.entryCommission, 0) / methods.length).toFixed(1) : '0'}
+                            </p>
                         </div>
                     </div>
                 </Card>
@@ -297,7 +270,9 @@ export default function Methods() {
                         </div>
                         <div>
                             <p className="text-[var(--color-text-secondary)] text-sm">Ortalama Çıkış</p>
-                            <p className="text-xl font-bold text-white">%1.5</p>
+                            <p className="text-xl font-bold text-white">
+                                %{methods.length > 0 ? (methods.reduce((sum, m) => sum + m.exitCommission, 0) / methods.length).toFixed(1) : '0'}
+                            </p>
                         </div>
                     </div>
                 </Card>
@@ -330,45 +305,56 @@ export default function Methods() {
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            {table.getHeaderGroups().map((headerGroup) => (
-                                <tr key={headerGroup.id} className="border-b border-[var(--color-border-glass)]">
-                                    {headerGroup.headers.map((header) => (
-                                        <th
-                                            key={header.id}
-                                            className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium"
-                                        >
-                                            {header.isPlaceholder
-                                                ? null
-                                                : flexRender(header.column.columnDef.header, header.getContext())}
-                                        </th>
-                                    ))}
-                                </tr>
-                            ))}
-                        </thead>
-                        <tbody>
-                            {table.getRowModel().rows.map((row) => (
-                                <tr
-                                    key={row.id}
-                                    className="border-b border-[var(--color-border-glass)] hover:bg-[var(--color-bg-secondary)] transition-colors"
-                                >
-                                    {row.getVisibleCells().map((cell) => (
-                                        <td key={cell.id} className="py-4 px-4">
-                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                {loading ? (
+                    <div className="flex items-center justify-center py-12">
+                        <Loader2 className="w-8 h-8 text-[var(--color-accent-orange)] animate-spin" />
+                        <span className="ml-3 text-[var(--color-text-secondary)]">Yükleniyor...</span>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                {table.getHeaderGroups().map((headerGroup) => (
+                                    <tr key={headerGroup.id} className="border-b border-[var(--color-border-glass)]">
+                                        {headerGroup.headers.map((header) => (
+                                            <th
+                                                key={header.id}
+                                                className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium"
+                                            >
+                                                {header.isPlaceholder
+                                                    ? null
+                                                    : flexRender(header.column.columnDef.header, header.getContext())}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </thead>
+                            <tbody>
+                                {table.getRowModel().rows.map((row) => (
+                                    <tr
+                                        key={row.id}
+                                        className="border-b border-[var(--color-border-glass)] hover:bg-[var(--color-bg-secondary)] transition-colors"
+                                    >
+                                        {row.getVisibleCells().map((cell) => (
+                                            <td key={cell.id} className="py-4 px-4">
+                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
 
-                {table.getRowModel().rows.length === 0 && (
+                {!loading && table.getRowModel().rows.length === 0 && (
                     <div className="text-center py-12">
                         <Layers className="w-12 h-12 mx-auto text-[var(--color-text-muted)] mb-4" />
                         <p className="text-[var(--color-text-secondary)]">Henüz yöntem eklenmemiş</p>
+                        <Button onClick={() => setIsModalOpen(true)} className="mt-4">
+                            <Plus className="w-4 h-4 mr-2" />
+                            İlk Yöntemi Ekle
+                        </Button>
                     </div>
                 )}
             </Card>
@@ -441,8 +427,13 @@ export default function Methods() {
                         <Button variant="ghost" type="button" onClick={resetForm}>
                             İptal
                         </Button>
-                        <Button type="submit">
-                            {editingMethod ? (
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Kaydediliyor...
+                                </>
+                            ) : editingMethod ? (
                                 <>
                                     <Pencil className="w-4 h-4 mr-2" />
                                     Güncelle
