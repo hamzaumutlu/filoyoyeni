@@ -10,29 +10,31 @@
   --color-bg-secondary: #1E1E1E;
   --color-bg-card: #2A2A2A;
   --color-bg-card-hover: #333333;
-  
+
   --color-accent-orange: #FF5722;
   --color-accent-orange-light: #FF8A50;
   --color-accent-green: #22C55E;
   --color-accent-red: #EF4444;
-  
+
   --color-text-primary: #FFFFFF;
   --color-text-secondary: #9CA3AF;
   --color-text-muted: #6B7280;
-  
+
   --color-border-glass: rgba(255, 255, 255, 0.1);
   --color-border-glass-hover: rgba(255, 255, 255, 0.2);
-  
+
   /* Shadows */
   --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.3);
   --shadow-glow-orange: 0 0 20px rgba(255, 87, 34, 0.3);
-  
+
   /* Fonts */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 /* Base Styles */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -111,7 +113,9 @@ body {
 }
 
 /* Input Focus States */
-input:focus, select:focus, textarea:focus {
+input:focus,
+select:focus,
+textarea:focus {
   outline: none;
   border-color: var(--color-accent-orange);
 }
@@ -136,7 +140,8 @@ table {
   width: 100%;
 }
 
-th, td {
+th,
+td {
   text-align: left;
   padding: 12px 16px;
 }
@@ -168,4 +173,3 @@ th, td {
     color: var(--color-accent-orange);
   }
 }
-

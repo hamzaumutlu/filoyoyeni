@@ -1,0 +1,406 @@
+import { useState } from 'react';
+import {
+    CreditCard,
+    Plus,
+    Search,
+    Pencil,
+    Trash2,
+    Calendar,
+    TrendingDown,
+    Layers,
+} from 'lucide-react';
+import {
+    useReactTable,
+    getCoreRowModel,
+    getFilteredRowModel,
+    getSortedRowModel,
+    flexRender,
+    type ColumnDef,
+    type SortingState,
+} from '@tanstack/react-table';
+import { MainLayout } from '../components/layout';
+import { Card, Button, Modal, Input, Select } from '../components/ui';
+import type { Payment, Method } from '../types';
+
+// Mock methods for reference
+const mockMethods: Method[] = [
+    { id: '1', name: 'Yolcu360', entryCommission: 2.5, exitCommission: 1.5, deliveryCommission: 3.0, openingBalance: 50000, status: 'active' },
+    { id: '2', name: 'Enuygun', entryCommission: 2.0, exitCommission: 1.0, deliveryCommission: 2.5, openingBalance: 35000, status: 'active' },
+    { id: '3', name: 'BiTaksi', entryCommission: 3.0, exitCommission: 2.0, deliveryCommission: 2.0, openingBalance: 20000, status: 'inactive' },
+];
+
+// Mock payments
+const mockPayments: Payment[] = [
+    { id: '1', date: new Date('2026-01-28'), description: 'Araç Sigorta Ödemesi', amount: 8500, methodId: '1' },
+    { id: '2', date: new Date('2026-01-27'), description: 'Ofis Kirası', amount: 15000 },
+    { id: '3', date: new Date('2026-01-25'), description: 'Benzin Gideri', amount: 3200, methodId: '2' },
+    { id: '4', date: new Date('2026-01-24'), description: 'Araç Bakım', amount: 4800, methodId: '1' },
+    { id: '5', date: new Date('2026-01-22'), description: 'Personel Yemeği', amount: 1200 },
+];
+
+interface FormData {
+    date: string;
+    description: string;
+    amount: string;
+    methodId: string;
+}
+
+export default function Payments() {
+    const [payments, setPayments] = useState<Payment[]>(mockPayments);
+    const [methods] = useState<Method[]>(mockMethods);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+    const [globalFilter, setGlobalFilter] = useState('');
+    const [sorting, setSorting] = useState<SortingState>([{ id: 'date', desc: true }]);
+
+    const [formData, setFormData] = useState<FormData>({
+        date: new Date().toISOString().split('T')[0],
+        description: '',
+        amount: '',
+        methodId: '',
+    });
+
+    const columns: ColumnDef<Payment>[] = [
+        {
+            accessorKey: 'date',
+            header: 'Tarih',
+            cell: ({ getValue }) => (
+                <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-[var(--color-bg-secondary)] flex items-center justify-center">
+                        <Calendar className="w-4 h-4 text-[var(--color-text-muted)]" />
+                    </div>
+                    <span className="text-white">
+                        {(getValue() as Date).toLocaleDateString('tr-TR', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                        })}
+                    </span>
+                </div>
+            ),
+            sortingFn: 'datetime',
+        },
+        {
+            accessorKey: 'description',
+            header: 'Açıklama',
+            cell: ({ getValue }) => (
+                <span className="text-white font-medium">{getValue() as string}</span>
+            ),
+        },
+        {
+            accessorKey: 'amount',
+            header: 'Tutar',
+            cell: ({ getValue }) => (
+                <span className="text-[var(--color-accent-red)] font-semibold">
+                    -₺{(getValue() as number).toLocaleString('tr-TR')}
+                </span>
+            ),
+        },
+        {
+            accessorKey: 'methodId',
+            header: 'İlgili Yöntem',
+            cell: ({ getValue }) => {
+                const methodId = getValue() as string | undefined;
+                const method = methods.find((m) => m.id === methodId);
+                return method ? (
+                    <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-md bg-[var(--color-accent-orange)]/20 flex items-center justify-center">
+                            <Layers className="w-3 h-3 text-[var(--color-accent-orange)]" />
+                        </div>
+                        <span className="text-[var(--color-accent-orange)]">{method.name}</span>
+                    </div>
+                ) : (
+                    <span className="text-[var(--color-text-muted)]">Genel Gider</span>
+                );
+            },
+        },
+        {
+            id: 'actions',
+            header: '',
+            cell: ({ row }) => (
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={() => handleEdit(row.original)}
+                        className="p-2 rounded-lg hover:bg-[var(--color-bg-secondary)] transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-accent-orange)]"
+                    >
+                        <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={() => handleDelete(row.original.id)}
+                        className="p-2 rounded-lg hover:bg-[var(--color-accent-red)]/10 transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-accent-red)]"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                </div>
+            ),
+        },
+    ];
+
+    const table = useReactTable({
+        data: payments,
+        columns,
+        getCoreRowModel: getCoreRowModel(),
+        getFilteredRowModel: getFilteredRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        state: { globalFilter, sorting },
+        onGlobalFilterChange: setGlobalFilter,
+        onSortingChange: setSorting,
+    });
+
+    const handleEdit = (payment: Payment) => {
+        setEditingPayment(payment);
+        setFormData({
+            date: new Date(payment.date).toISOString().split('T')[0],
+            description: payment.description,
+            amount: payment.amount.toString(),
+            methodId: payment.methodId || '',
+        });
+        setIsModalOpen(true);
+    };
+
+    const handleDelete = (id: string) => {
+        setPayments(payments.filter((p) => p.id !== id));
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (editingPayment) {
+            setPayments(
+                payments.map((p) =>
+                    p.id === editingPayment.id
+                        ? {
+                            ...p,
+                            date: new Date(formData.date),
+                            description: formData.description,
+                            amount: parseFloat(formData.amount),
+                            methodId: formData.methodId || undefined,
+                        }
+                        : p
+                )
+            );
+        } else {
+            const newPayment: Payment = {
+                id: Date.now().toString(),
+                date: new Date(formData.date),
+                description: formData.description,
+                amount: parseFloat(formData.amount),
+                methodId: formData.methodId || undefined,
+            };
+            setPayments([newPayment, ...payments]);
+        }
+
+        resetForm();
+    };
+
+    const resetForm = () => {
+        setFormData({
+            date: new Date().toISOString().split('T')[0],
+            description: '',
+            amount: '',
+            methodId: '',
+        });
+        setEditingPayment(null);
+        setIsModalOpen(false);
+    };
+
+    // Calculate stats
+    const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
+    const methodPayments = payments.filter((p) => p.methodId).reduce((sum, p) => sum + p.amount, 0);
+    const generalPayments = payments.filter((p) => !p.methodId).reduce((sum, p) => sum + p.amount, 0);
+
+    return (
+        <MainLayout breadcrumb={['Ödemeler']}>
+            {/* Page Header */}
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h1 className="text-2xl font-bold text-white">Ödemeler & Giderler</h1>
+                    <p className="text-[var(--color-text-secondary)] mt-1">
+                        Tüm gider ve ödemeleri takip edin
+                    </p>
+                </div>
+                <Button onClick={() => setIsModalOpen(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Ödeme Ekle
+                </Button>
+            </div>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <Card className="bg-gradient-to-br from-[var(--color-accent-red)]/20 to-[var(--color-accent-red)]/5 border-[var(--color-accent-red)]/20">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-[var(--color-accent-red)]/20 flex items-center justify-center">
+                            <TrendingDown className="w-6 h-6 text-[var(--color-accent-red)]" />
+                        </div>
+                        <div>
+                            <p className="text-[var(--color-text-secondary)] text-sm">Toplam Gider</p>
+                            <p className="text-2xl font-bold text-white">₺{totalPayments.toLocaleString('tr-TR')}</p>
+                        </div>
+                    </div>
+                </Card>
+                <Card className="bg-gradient-to-br from-[var(--color-accent-orange)]/20 to-[var(--color-accent-orange)]/5 border-[var(--color-accent-orange)]/20">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-[var(--color-accent-orange)]/20 flex items-center justify-center">
+                            <Layers className="w-6 h-6 text-[var(--color-accent-orange)]" />
+                        </div>
+                        <div>
+                            <p className="text-[var(--color-text-secondary)] text-sm">Yöntem Giderleri</p>
+                            <p className="text-2xl font-bold text-white">₺{methodPayments.toLocaleString('tr-TR')}</p>
+                        </div>
+                    </div>
+                </Card>
+                <Card className="bg-gradient-to-br from-[var(--color-text-muted)]/20 to-[var(--color-text-muted)]/5 border-[var(--color-text-muted)]/20">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-[var(--color-text-muted)]/20 flex items-center justify-center">
+                            <CreditCard className="w-6 h-6 text-[var(--color-text-muted)]" />
+                        </div>
+                        <div>
+                            <p className="text-[var(--color-text-secondary)] text-sm">Genel Giderler</p>
+                            <p className="text-2xl font-bold text-white">₺{generalPayments.toLocaleString('tr-TR')}</p>
+                        </div>
+                    </div>
+                </Card>
+            </div>
+
+            {/* Sync Info */}
+            <div className="mb-6 p-4 rounded-xl bg-[var(--color-accent-orange)]/10 border border-[var(--color-accent-orange)]/20">
+                <div className="flex items-start gap-3">
+                    <Layers className="w-5 h-5 text-[var(--color-accent-orange)] mt-0.5" />
+                    <div>
+                        <p className="text-white font-medium">Otomatik Senkronizasyon</p>
+                        <p className="text-[var(--color-text-secondary)] text-sm mt-1">
+                            Bir yöntem seçtiğinizde, bu ödeme otomatik olarak "Veri Girişi" sayfasındaki ilgili yöntemin tablosuna yansıyacaktır.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Payments Table */}
+            <Card>
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-white">Tüm Ödemeler</h3>
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]" />
+                        <input
+                            type="text"
+                            placeholder="Ödeme ara..."
+                            value={globalFilter}
+                            onChange={(e) => setGlobalFilter(e.target.value)}
+                            className="w-64 pl-10 pr-4 py-2 rounded-xl bg-[var(--color-bg-secondary)] text-white text-sm border border-[var(--color-border-glass)] focus:border-[var(--color-accent-orange)] transition-colors placeholder:text-[var(--color-text-muted)]"
+                        />
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="w-full">
+                        <thead>
+                            {table.getHeaderGroups().map((headerGroup) => (
+                                <tr key={headerGroup.id} className="border-b border-[var(--color-border-glass)]">
+                                    {headerGroup.headers.map((header) => (
+                                        <th
+                                            key={header.id}
+                                            className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium cursor-pointer hover:text-white"
+                                            onClick={header.column.getToggleSortingHandler()}
+                                        >
+                                            <div className="flex items-center gap-1">
+                                                {header.isPlaceholder
+                                                    ? null
+                                                    : flexRender(header.column.columnDef.header, header.getContext())}
+                                                {header.column.getIsSorted() && (
+                                                    <span>{header.column.getIsSorted() === 'desc' ? '↓' : '↑'}</span>
+                                                )}
+                                            </div>
+                                        </th>
+                                    ))}
+                                </tr>
+                            ))}
+                        </thead>
+                        <tbody>
+                            {table.getRowModel().rows.map((row) => (
+                                <tr
+                                    key={row.id}
+                                    className="border-b border-[var(--color-border-glass)] hover:bg-[var(--color-bg-secondary)] transition-colors"
+                                >
+                                    {row.getVisibleCells().map((cell) => (
+                                        <td key={cell.id} className="py-4 px-4">
+                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                {table.getRowModel().rows.length === 0 && (
+                    <div className="text-center py-12">
+                        <CreditCard className="w-12 h-12 mx-auto text-[var(--color-text-muted)] mb-4" />
+                        <p className="text-[var(--color-text-secondary)]">Henüz ödeme eklenmemiş</p>
+                    </div>
+                )}
+            </Card>
+
+            {/* Add/Edit Payment Modal */}
+            <Modal
+                isOpen={isModalOpen}
+                onClose={resetForm}
+                title={editingPayment ? 'Ödemeyi Düzenle' : 'Yeni Ödeme Ekle'}
+                size="md"
+            >
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <Input
+                        label="Tarih"
+                        type="date"
+                        value={formData.date}
+                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                        required
+                    />
+
+                    <Input
+                        label="Açıklama"
+                        placeholder="Ödeme açıklaması"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        required
+                    />
+
+                    <Input
+                        label="Tutar (₺)"
+                        type="number"
+                        placeholder="1000"
+                        value={formData.amount}
+                        onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                        required
+                    />
+
+                    <Select
+                        label="İlgili Yöntem (Opsiyonel)"
+                        options={[
+                            { value: '', label: 'Genel Gider (Yöntem Yok)' },
+                            ...methods.filter((m) => m.status === 'active').map((m) => ({ value: m.id, label: m.name })),
+                        ]}
+                        value={formData.methodId}
+                        onChange={(e) => setFormData({ ...formData, methodId: e.target.value })}
+                    />
+
+                    {formData.methodId && (
+                        <div className="p-3 rounded-lg bg-[var(--color-accent-orange)]/10 border border-[var(--color-accent-orange)]/20">
+                            <p className="text-sm text-[var(--color-text-secondary)]">
+                                <span className="text-[var(--color-accent-orange)]">●</span> Bu ödeme, "{methods.find((m) => m.id === formData.methodId)?.name}" yönteminin veri giriş tablosuna otomatik eklenecektir.
+                            </p>
+                        </div>
+                    )}
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-[var(--color-border-glass)]">
+                        <Button variant="ghost" type="button" onClick={resetForm}>
+                            İptal
+                        </Button>
+                        <Button type="submit">
+                            {editingPayment ? 'Güncelle' : 'Ekle'}
+                        </Button>
+                    </div>
+                </form>
+            </Modal>
+        </MainLayout>
+    );
+}

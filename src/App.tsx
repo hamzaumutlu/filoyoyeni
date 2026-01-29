@@ -1,5 +1,10 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
+import Companies from './pages/Companies';
+import Personnel from './pages/Personnel';
+import Methods from './pages/Methods';
+import DataEntry from './pages/DataEntry';
+import Payments from './pages/Payments';
 import './index.css';
 
 function App() {
@@ -7,18 +12,18 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/companies" element={<PlaceholderPage title="Firmalar" />} />
-        <Route path="/personnel" element={<PlaceholderPage title="Personel" />} />
-        <Route path="/methods" element={<PlaceholderPage title="Yöntemler" />} />
-        <Route path="/data-entry" element={<PlaceholderPage title="Veri Girişi" />} />
-        <Route path="/payments" element={<PlaceholderPage title="Ödemeler" />} />
+        <Route path="/companies" element={<Companies />} />
+        <Route path="/personnel" element={<Personnel />} />
+        <Route path="/methods" element={<Methods />} />
+        <Route path="/data-entry" element={<DataEntry />} />
+        <Route path="/payments" element={<Payments />} />
         <Route path="/settings" element={<PlaceholderPage title="Ayarlar" />} />
       </Routes>
     </BrowserRouter>
   );
 }
 
-// Placeholder component for other pages
+// Placeholder component for settings page
 function PlaceholderPage({ title }: { title: string }) {
   return (
     <div className="min-h-screen bg-[var(--color-bg-primary)] flex items-center justify-center">
