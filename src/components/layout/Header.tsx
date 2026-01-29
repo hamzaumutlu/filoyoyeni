@@ -70,13 +70,6 @@ export default function Header({ breadcrumb = ['Dashboard'] }: HeaderProps) {
                     </div>
                     <span className="text-sm font-medium text-white hidden sm:block">Admin</span>
                 </button>
-
-                {/* Share Button - Desktop only */}
-                <button className="hidden md:flex px-4 py-2 rounded-xl gradient-orange text-white text-sm font-medium
-          items-center gap-2 hover:opacity-90 transition-opacity">
-                    Paylaş
-                    <span className="text-lg">↗</span>
-                </button>
             </div>
         </header>
     );

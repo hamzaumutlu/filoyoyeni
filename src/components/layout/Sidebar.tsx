@@ -146,28 +146,6 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                 </ul>
             </div>
 
-            {/* Pro Upgrade Card */}
-            {!isCollapsed && (
-                <div className="p-4">
-                    <div className="p-4 rounded-2xl bg-[var(--color-bg-card)] border border-[var(--color-border-glass)]">
-                        <div className="flex items-center gap-2 mb-2">
-                            <span className="text-lg">👋</span>
-                            <span className="font-semibold text-white">Pro'ya Yükselt!</span>
-                        </div>
-                        <p className="text-xs text-[var(--color-text-secondary)] mb-3">
-                            Daha fazla özellik ve sınırsız veri girişi
-                        </p>
-                        <div className="flex gap-2">
-                            <button className="flex-1 px-3 py-2 rounded-xl gradient-orange text-white text-sm font-medium hover:opacity-90 transition-opacity">
-                                Yükselt
-                            </button>
-                            <button className="px-3 py-2 rounded-xl bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] text-sm hover:text-white transition-colors">
-                                Detay
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* Collapse Toggle */}
             <button
