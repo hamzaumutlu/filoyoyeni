@@ -3,7 +3,6 @@ import {
     Layers,
     Plus,
     Search,
-    MoreHorizontal,
     Pencil,
     Trash2,
     Link2,

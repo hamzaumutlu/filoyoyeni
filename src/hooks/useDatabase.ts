@@ -21,7 +21,8 @@ function useSupabaseData<T>(
 
         try {
             setLoading(true);
-            const { data: result, error: fetchError } = await supabase
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: result, error: fetchError } = await (supabase as any)
                 .from(tableName)
                 .select('*')
                 .order('created_at', { ascending: false });
@@ -59,7 +60,8 @@ export function useCompanies(mockData: Company[] = []) {
             return newCompany;
         }
 
-        const { data: result, error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: result, error } = await (supabase as any)
             .from('companies')
             .insert(company)
             .select()
@@ -67,7 +69,7 @@ export function useCompanies(mockData: Company[] = []) {
 
         if (error) throw error;
         await refetch();
-        return result;
+        return result as Company;
     };
 
     const updateCompany = async (id: string, updates: Partial<Company>) => {
@@ -76,7 +78,8 @@ export function useCompanies(mockData: Company[] = []) {
             return;
         }
 
-        const { error } = await supabase.from('companies').update(updates).eq('id', id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from('companies').update(updates).eq('id', id);
         if (error) throw error;
         await refetch();
     };
@@ -87,7 +90,8 @@ export function useCompanies(mockData: Company[] = []) {
             return;
         }
 
-        const { error } = await supabase.from('companies').delete().eq('id', id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from('companies').delete().eq('id', id);
         if (error) throw error;
         await refetch();
     };
@@ -112,7 +116,8 @@ export function usePersonnel(mockData: Personnel[] = []) {
             return newPersonnel;
         }
 
-        const { data: result, error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: result, error } = await (supabase as any)
             .from('personnel')
             .insert(personnel)
             .select()
@@ -120,7 +125,7 @@ export function usePersonnel(mockData: Personnel[] = []) {
 
         if (error) throw error;
         await refetch();
-        return result;
+        return result as Personnel;
     };
 
     const updatePersonnel = async (id: string, updates: Partial<Personnel>) => {
@@ -129,7 +134,8 @@ export function usePersonnel(mockData: Personnel[] = []) {
             return;
         }
 
-        const { error } = await supabase.from('personnel').update(updates).eq('id', id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from('personnel').update(updates).eq('id', id);
         if (error) throw error;
         await refetch();
     };
@@ -140,7 +146,8 @@ export function usePersonnel(mockData: Personnel[] = []) {
             return;
         }
 
-        const { error } = await supabase.from('personnel').delete().eq('id', id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from('personnel').delete().eq('id', id);
         if (error) throw error;
         await refetch();
     };
@@ -165,7 +172,8 @@ export function useAdvances(mockData: Advance[] = []) {
             return newAdvance;
         }
 
-        const { data: result, error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: result, error } = await (supabase as any)
             .from('advances')
             .insert(advance)
             .select()
@@ -173,7 +181,7 @@ export function useAdvances(mockData: Advance[] = []) {
 
         if (error) throw error;
         await refetch();
-        return result;
+        return result as Advance;
     };
 
     const deleteAdvance = async (id: string) => {
@@ -182,7 +190,8 @@ export function useAdvances(mockData: Advance[] = []) {
             return;
         }
 
-        const { error } = await supabase.from('advances').delete().eq('id', id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from('advances').delete().eq('id', id);
         if (error) throw error;
         await refetch();
     };
@@ -207,7 +216,8 @@ export function useMethods(mockData: Method[] = []) {
             return newMethod;
         }
 
-        const { data: result, error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: result, error } = await (supabase as any)
             .from('methods')
             .insert(method)
             .select()
@@ -215,7 +225,7 @@ export function useMethods(mockData: Method[] = []) {
 
         if (error) throw error;
         await refetch();
-        return result;
+        return result as Method;
     };
 
     const updateMethod = async (id: string, updates: Partial<Method>) => {
@@ -224,7 +234,8 @@ export function useMethods(mockData: Method[] = []) {
             return;
         }
 
-        const { error } = await supabase.from('methods').update(updates).eq('id', id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from('methods').update(updates).eq('id', id);
         if (error) throw error;
         await refetch();
     };
@@ -235,7 +246,8 @@ export function useMethods(mockData: Method[] = []) {
             return;
         }
 
-        const { error } = await supabase.from('methods').delete().eq('id', id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from('methods').delete().eq('id', id);
         if (error) throw error;
         await refetch();
     };
@@ -259,7 +271,8 @@ export function useDataEntries(methodId: string | null, mockData: DataEntry[] = 
 
         try {
             setLoading(true);
-            const { data: result, error: fetchError } = await supabase
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: result, error: fetchError } = await (supabase as any)
                 .from('data_entries')
                 .select('*')
                 .eq('method_id', methodId)
@@ -290,7 +303,8 @@ export function useDataEntries(methodId: string | null, mockData: DataEntry[] = 
             return newEntry;
         }
 
-        const { data: result, error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: result, error } = await (supabase as any)
             .from('data_entries')
             .insert(entry)
             .select()
@@ -298,7 +312,7 @@ export function useDataEntries(methodId: string | null, mockData: DataEntry[] = 
 
         if (error) throw error;
         await fetchData();
-        return result;
+        return result as DataEntry;
     };
 
     const updateEntry = async (id: string, updates: Partial<DataEntry>) => {
@@ -307,7 +321,8 @@ export function useDataEntries(methodId: string | null, mockData: DataEntry[] = 
             return;
         }
 
-        const { error } = await supabase.from('data_entries').update(updates).eq('id', id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from('data_entries').update(updates).eq('id', id);
         if (error) throw error;
         await fetchData();
     };
@@ -318,7 +333,8 @@ export function useDataEntries(methodId: string | null, mockData: DataEntry[] = 
             return;
         }
 
-        const { error } = await supabase.from('data_entries').delete().eq('id', id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from('data_entries').delete().eq('id', id);
         if (error) throw error;
         await fetchData();
     };
@@ -343,7 +359,8 @@ export function usePayments(mockData: Payment[] = []) {
             return newPayment;
         }
 
-        const { data: result, error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: result, error } = await (supabase as any)
             .from('payments')
             .insert(payment)
             .select()
@@ -351,7 +368,7 @@ export function usePayments(mockData: Payment[] = []) {
 
         if (error) throw error;
         await refetch();
-        return result;
+        return result as Payment;
     };
 
     const updatePayment = async (id: string, updates: Partial<Payment>) => {
@@ -360,7 +377,8 @@ export function usePayments(mockData: Payment[] = []) {
             return;
         }
 
-        const { error } = await supabase.from('payments').update(updates).eq('id', id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from('payments').update(updates).eq('id', id);
         if (error) throw error;
         await refetch();
     };
@@ -371,7 +389,8 @@ export function usePayments(mockData: Payment[] = []) {
             return;
         }
 
-        const { error } = await supabase.from('payments').delete().eq('id', id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from('payments').delete().eq('id', id);
         if (error) throw error;
         await refetch();
     };

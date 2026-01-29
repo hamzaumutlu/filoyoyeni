@@ -10,20 +10,13 @@ import {
 } from 'lucide-react';
 import { MainLayout } from '../components/layout';
 import { Card, Button, Modal, Input } from '../components/ui';
-import type { Method, DataEntry, Payment } from '../types';
+import type { Method, DataEntry } from '../types';
 
 // Mock methods
 const mockMethods: Method[] = [
     { id: '1', name: 'Yolcu360', entryCommission: 2.5, exitCommission: 1.5, deliveryCommission: 3.0, openingBalance: 50000, status: 'active' },
     { id: '2', name: 'Enuygun', entryCommission: 2.0, exitCommission: 1.0, deliveryCommission: 2.5, openingBalance: 35000, status: 'active' },
     { id: '3', name: 'BiTaksi', entryCommission: 3.0, exitCommission: 2.0, deliveryCommission: 2.0, openingBalance: 20000, status: 'active' },
-];
-
-// Mock payments (synced from Payments page)
-const mockPayments: Payment[] = [
-    { id: '1', date: new Date('2026-01-28'), description: 'Araç Sigorta Ödemesi', amount: 8500, methodId: '1' },
-    { id: '3', date: new Date('2026-01-25'), description: 'Benzin Gideri', amount: 3200, methodId: '2' },
-    { id: '4', date: new Date('2026-01-24'), description: 'Araç Bakım', amount: 4800, methodId: '1' },
 ];
 
 // Mock data entries
