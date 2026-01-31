@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
     Building2,
     Plus,
     Search,
-    MoreHorizontal,
     Mail,
     Eye,
     EyeOff,
+    Loader2,
+    Trash2,
+    Pencil,
 } from 'lucide-react';
 import {
     useReactTable,
@@ -17,55 +19,48 @@ import {
 } from '@tanstack/react-table';
 import { MainLayout } from '../components/layout';
 import { Card, Button, Modal, Input } from '../components/ui';
-import type { Company } from '../types';
+import { useCompaniesSupabase, type CompanyData } from '../hooks/useSupabase';
 
-// Mock data
-const mockCompanies: Company[] = [
-    {
-        id: '1',
-        name: 'Yolcu360 A.Ş.',
-        logo: '🚗',
-        status: 'active',
-        authorizedEmail: 'admin@yolcu360.com',
-        createdAt: new Date('2024-01-15'),
-    },
-    {
-        id: '2',
-        name: 'Enuygun Araç Kiralama',
-        logo: '🚙',
-        status: 'active',
-        authorizedEmail: 'info@enuygun.com',
-        createdAt: new Date('2024-02-20'),
-    },
-    {
-        id: '3',
-        name: 'Rent Go',
-        logo: '🚕',
-        status: 'pending',
-        authorizedEmail: 'contact@rentgo.com.tr',
-        createdAt: new Date('2024-03-10'),
-    },
-];
+interface FormData {
+    name: string;
+    email: string;
+    password: string;
+}
 
 export default function Companies() {
-    const [companies, setCompanies] = useState<Company[]>(mockCompanies);
+    // Use Supabase hook
+    const { companies: rawCompanies, loading, addCompany, updateCompany, deleteCompany } = useCompaniesSupabase();
+
+    // Transform to UI format
+    const companies = useMemo(() =>
+        rawCompanies.map((c: CompanyData) => ({
+            ...c,
+            createdAt: new Date(c.createdAt),
+        })), [rawCompanies]);
+
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingCompanyId, setEditingCompanyId] = useState<string | null>(null);
     const [globalFilter, setGlobalFilter] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const [formData, setFormData] = useState({
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [formData, setFormData] = useState<FormData>({
         name: '',
         email: '',
         password: '',
     });
 
-    const columns: ColumnDef<Company>[] = [
+    const columns: ColumnDef<typeof companies[0]>[] = [
         {
             accessorKey: 'name',
             header: 'Firma Adı',
             cell: ({ row }) => (
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-[var(--color-bg-secondary)] flex items-center justify-center text-xl">
-                        {row.original.logo || <Building2 className="w-5 h-5 text-[var(--color-accent-orange)]" />}
+                        {row.original.logoUrl ? (
+                            <img src={row.original.logoUrl} alt="" className="w-8 h-8 rounded-lg object-cover" />
+                        ) : (
+                            <Building2 className="w-5 h-5 text-[var(--color-accent-orange)]" />
+                        )}
                     </div>
                     <span className="font-medium text-white">{row.original.name}</span>
                 </div>
@@ -111,10 +106,21 @@ export default function Companies() {
         {
             id: 'actions',
             header: '',
-            cell: () => (
-                <button className="p-2 rounded-lg hover:bg-[var(--color-bg-secondary)] transition-colors text-[var(--color-text-muted)] hover:text-white">
-                    <MoreHorizontal className="w-5 h-5" />
-                </button>
+            cell: ({ row }) => (
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={() => handleEdit(row.original)}
+                        className="p-2 rounded-lg hover:bg-[var(--color-bg-secondary)] transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-accent-orange)]"
+                    >
+                        <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={() => handleDelete(row.original.id)}
+                        className="p-2 rounded-lg hover:bg-[var(--color-accent-red)]/10 transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-accent-red)]"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                </div>
             ),
         },
     ];
@@ -128,17 +134,56 @@ export default function Companies() {
         onGlobalFilterChange: setGlobalFilter,
     });
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleEdit = (company: typeof companies[0]) => {
+        setEditingCompanyId(company.id);
+        setFormData({
+            name: company.name,
+            email: company.authorizedEmail,
+            password: '',
+        });
+        setIsModalOpen(true);
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm('Bu firmayı silmek istediğinize emin misiniz?')) return;
+        try {
+            await deleteCompany(id);
+        } catch (err) {
+            console.error('Delete error:', err);
+            alert('Silme işlemi başarısız oldu');
+        }
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const newCompany: Company = {
-            id: Date.now().toString(),
-            name: formData.name,
-            authorizedEmail: formData.email,
-            status: 'active',
-            createdAt: new Date(),
-        };
-        setCompanies([...companies, newCompany]);
+        setIsSubmitting(true);
+
+        try {
+            if (editingCompanyId) {
+                await updateCompany(editingCompanyId, {
+                    name: formData.name,
+                    authorizedEmail: formData.email,
+                });
+            } else {
+                await addCompany({
+                    name: formData.name,
+                    authorizedEmail: formData.email,
+                    status: 'active',
+                });
+            }
+            resetForm();
+        } catch (err) {
+            console.error('Submit error:', err);
+            alert('İşlem başarısız oldu: ' + (err instanceof Error ? err.message : 'Bilinmeyen hata'));
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const resetForm = () => {
         setFormData({ name: '', email: '', password: '' });
+        setEditingCompanyId(null);
+        setShowPassword(false);
         setIsModalOpen(false);
     };
 
@@ -174,42 +219,48 @@ export default function Companies() {
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            {table.getHeaderGroups().map((headerGroup) => (
-                                <tr key={headerGroup.id} className="border-b border-[var(--color-border-glass)]">
-                                    {headerGroup.headers.map((header) => (
-                                        <th
-                                            key={header.id}
-                                            className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium"
-                                        >
-                                            {header.isPlaceholder
-                                                ? null
-                                                : flexRender(header.column.columnDef.header, header.getContext())}
-                                        </th>
-                                    ))}
-                                </tr>
-                            ))}
-                        </thead>
-                        <tbody>
-                            {table.getRowModel().rows.map((row) => (
-                                <tr
-                                    key={row.id}
-                                    className="border-b border-[var(--color-border-glass)] hover:bg-[var(--color-bg-secondary)] transition-colors"
-                                >
-                                    {row.getVisibleCells().map((cell) => (
-                                        <td key={cell.id} className="py-4 px-4">
-                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                {loading ? (
+                    <div className="flex items-center justify-center py-12">
+                        <Loader2 className="w-8 h-8 text-[var(--color-accent-orange)] animate-spin" />
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                {table.getHeaderGroups().map((headerGroup) => (
+                                    <tr key={headerGroup.id} className="border-b border-[var(--color-border-glass)]">
+                                        {headerGroup.headers.map((header) => (
+                                            <th
+                                                key={header.id}
+                                                className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium"
+                                            >
+                                                {header.isPlaceholder
+                                                    ? null
+                                                    : flexRender(header.column.columnDef.header, header.getContext())}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </thead>
+                            <tbody>
+                                {table.getRowModel().rows.map((row) => (
+                                    <tr
+                                        key={row.id}
+                                        className="border-b border-[var(--color-border-glass)] hover:bg-[var(--color-bg-secondary)] transition-colors"
+                                    >
+                                        {row.getVisibleCells().map((cell) => (
+                                            <td key={cell.id} className="py-4 px-4">
+                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
 
-                {table.getRowModel().rows.length === 0 && (
+                {!loading && table.getRowModel().rows.length === 0 && (
                     <div className="text-center py-12">
                         <Building2 className="w-12 h-12 mx-auto text-[var(--color-text-muted)] mb-4" />
                         <p className="text-[var(--color-text-secondary)]">Henüz firma eklenmemiş</p>
@@ -217,8 +268,13 @@ export default function Companies() {
                 )}
             </Card>
 
-            {/* Add Company Modal */}
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Yeni Firma Ekle" size="md">
+            {/* Add/Edit Company Modal */}
+            <Modal
+                isOpen={isModalOpen}
+                onClose={resetForm}
+                title={editingCompanyId ? 'Firma Düzenle' : 'Yeni Firma Ekle'}
+                size="md"
+            >
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <Input
                         label="Firma Adı"
@@ -238,39 +294,45 @@ export default function Companies() {
                         required
                     />
 
-                    <div className="w-full">
-                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                            Şifre
-                        </label>
-                        <div className="relative">
-                            <input
-                                type={showPassword ? 'text' : 'password'}
-                                placeholder="••••••••"
-                                value={formData.password}
-                                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors pr-12"
-                                required
-                            />
-                            <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-white"
-                            >
-                                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                            </button>
+                    {!editingCompanyId && (
+                        <div className="w-full">
+                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                Şifre
+                            </label>
+                            <div className="relative">
+                                <input
+                                    type={showPassword ? 'text' : 'password'}
+                                    placeholder="••••••••"
+                                    value={formData.password}
+                                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors pr-12"
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-white"
+                                >
+                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                </button>
+                            </div>
+                            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                                Bu şifre ile firma yetkilisi sisteme giriş yapacak
+                            </p>
                         </div>
-                        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                            Bu şifre ile firma yetkilisi sisteme giriş yapacak
-                        </p>
-                    </div>
+                    )}
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-[var(--color-border-glass)]">
-                        <Button variant="ghost" type="button" onClick={() => setIsModalOpen(false)}>
+                        <Button variant="ghost" type="button" onClick={resetForm}>
                             İptal
                         </Button>
-                        <Button type="submit">
-                            <Plus className="w-4 h-4 mr-2" />
-                            Firma Ekle
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <Plus className="w-4 h-4 mr-2" />
+                            )}
+                            {editingCompanyId ? 'Güncelle' : 'Firma Ekle'}
                         </Button>
                     </div>
                 </form>

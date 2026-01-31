@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import {
     ArrowUpRight,
     Wallet,
@@ -6,6 +7,8 @@ import {
     MoreHorizontal,
     Filter,
     Search,
+    Layers,
+    Loader2,
 } from 'lucide-react';
 import {
     AreaChart,
@@ -18,6 +21,7 @@ import {
 } from 'recharts';
 import { MainLayout } from '../components/layout';
 import { Card } from '../components/ui';
+import { useMethodsSupabase, useDataEntriesSupabase, type MethodData } from '../hooks/useSupabase';
 
 // Mock data for charts
 const cashFlowData = [
@@ -38,14 +42,39 @@ const recentActivities = [
     { id: 4, activity: 'Araç Bakım', orderId: 'MNT_003456', date: '15 Nis, 2026', time: '16:00', price: '₺3,800', status: 'Tamamlandı' },
 ];
 
-// Mock data for wallet currencies
-const walletData = [
-    { currency: 'TRY', symbol: '₺', amount: '124,678.00', limit: 'Ana Hesap', flag: '🇹🇷', active: true },
-    { currency: 'USD', symbol: '$', amount: '4,532.00', limit: 'Döviz Hesabı', flag: '🇺🇸', active: true },
-    { currency: 'EUR', symbol: '€', amount: '2,845.00', limit: 'Döviz Hesabı', flag: '🇪🇺', active: true },
-];
-
 export default function Dashboard() {
+    // Fetch methods from Supabase
+    const { methods: rawMethods, loading: methodsLoading } = useMethodsSupabase();
+    const activeMethods = useMemo(() => rawMethods.filter((m: MethodData) => m.status === 'active'), [rawMethods]);
+
+    // Calculate total balance across all methods
+    const totalMethodBalance = useMemo(() => {
+        return activeMethods.reduce((sum, m: MethodData) => sum + m.openingBalance, 0);
+    }, [activeMethods]);
+
+    // Search and filter state for activities
+    const [activitySearch, setActivitySearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'Tamamlandı' | 'Beklemede'>('all');
+    const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+
+    // Filtered activities
+    const filteredActivities = useMemo(() => {
+        return recentActivities.filter(activity => {
+            // Search filter
+            const searchLower = activitySearch.toLowerCase();
+            const matchesSearch = activitySearch === '' ||
+                activity.activity.toLowerCase().includes(searchLower) ||
+                activity.orderId.toLowerCase().includes(searchLower) ||
+                activity.date.toLowerCase().includes(searchLower) ||
+                activity.price.toLowerCase().includes(searchLower);
+
+            // Status filter
+            const matchesStatus = statusFilter === 'all' || activity.status === statusFilter;
+
+            return matchesSearch && matchesStatus;
+        });
+    }, [activitySearch, statusFilter]);
+
     return (
         <MainLayout breadcrumb={['Dashboard']}>
             {/* Page Header */}
@@ -153,40 +182,39 @@ export default function Dashboard() {
                 </Card>
             </div>
 
-            {/* Second Row: Wallet + Cash Flow */}
+            {/* Method Balances Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                {/* My Wallet */}
+                {/* Method Kasaları */}
                 <Card variant="default">
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <h3 className="text-lg font-semibold text-white">Cüzdanım</h3>
-                            <p className="text-[var(--color-text-muted)] text-sm">Bugün 1 USD = 32.45 TRY</p>
+                            <h3 className="text-lg font-semibold text-white">Yöntem Kasaları</h3>
+                            <p className="text-[var(--color-text-muted)] text-sm">Tüm yöntemlerin güncel bakiyeleri</p>
                         </div>
-                        <button className="px-4 py-2 rounded-xl gradient-orange text-white text-sm font-medium flex items-center gap-2">
-                            + Yeni Ekle
-                        </button>
+                        <div className="text-right">
+                            <p className="text-[var(--color-text-muted)] text-xs">Toplam Kasa</p>
+                            <p className="text-xl font-bold text-[var(--color-accent-green)]">
+                                ₺{totalMethodBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                            </p>
+                        </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        {walletData.map((wallet, index) => (
-                            <div
-                                key={index}
-                                className="p-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] hover:border-[var(--color-border-glass-hover)] transition-colors"
-                            >
-                                <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-xl">{wallet.flag}</span>
-                                    <span className="text-white font-medium">{wallet.currency}</span>
-                                    <button className="ml-auto text-[var(--color-text-muted)]">
-                                        <MoreHorizontal className="w-4 h-4" />
-                                    </button>
-                                </div>
-                                <p className="text-xl font-bold text-white">{wallet.symbol}{wallet.amount}</p>
-                                <p className="text-[var(--color-text-muted)] text-xs mt-1">{wallet.limit}</p>
-                                <span className={`inline-block mt-2 px-2 py-0.5 rounded text-xs ${wallet.active ? 'text-[var(--color-accent-green)] bg-[var(--color-accent-green)]/10' : 'text-[var(--color-text-muted)] bg-[var(--color-bg-card)]'}`}>
-                                    {wallet.active ? 'Aktif' : 'Pasif'}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
+
+                    {methodsLoading ? (
+                        <div className="flex items-center justify-center py-8">
+                            <Loader2 className="w-6 h-6 text-[var(--color-accent-orange)] animate-spin" />
+                        </div>
+                    ) : activeMethods.length === 0 ? (
+                        <div className="text-center py-8">
+                            <Layers className="w-12 h-12 mx-auto text-[var(--color-text-muted)] mb-4" />
+                            <p className="text-[var(--color-text-secondary)]">Henüz yöntem eklenmemiş</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-2 gap-3">
+                            {activeMethods.map((method: MethodData) => (
+                                <MethodBalanceCard key={method.id} method={method} />
+                            ))}
+                        </div>
+                    )}
                 </Card>
 
                 {/* Cash Flow Chart */}
@@ -250,13 +278,48 @@ export default function Dashboard() {
                             <input
                                 type="text"
                                 placeholder="Ara..."
+                                value={activitySearch}
+                                onChange={(e) => setActivitySearch(e.target.value)}
                                 className="w-48 pl-10 pr-4 py-2 rounded-xl bg-[var(--color-bg-secondary)] text-white text-sm border border-[var(--color-border-glass)] focus:border-[var(--color-accent-orange)] transition-colors placeholder:text-[var(--color-text-muted)]"
                             />
                         </div>
-                        <button className="px-3 py-2 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-[var(--color-text-secondary)] text-sm hover:border-[var(--color-accent-orange)] transition-colors flex items-center gap-2">
-                            <Filter className="w-4 h-4" />
-                            Filtre
-                        </button>
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                                className={`px-3 py-2 rounded-xl bg-[var(--color-bg-secondary)] border text-sm transition-colors flex items-center gap-2 ${statusFilter !== 'all'
+                                        ? 'border-[var(--color-accent-orange)] text-[var(--color-accent-orange)]'
+                                        : 'border-[var(--color-border-glass)] text-[var(--color-text-secondary)] hover:border-[var(--color-accent-orange)]'
+                                    }`}
+                            >
+                                <Filter className="w-4 h-4" />
+                                {statusFilter === 'all' ? 'Filtre' : statusFilter}
+                            </button>
+                            {showFilterDropdown && (
+                                <div className="absolute right-0 mt-2 w-40 bg-[var(--color-bg-card)] border border-[var(--color-border-glass)] rounded-xl shadow-xl z-10 overflow-hidden">
+                                    <button
+                                        onClick={() => { setStatusFilter('all'); setShowFilterDropdown(false); }}
+                                        className={`w-full px-4 py-2 text-left text-sm transition-colors ${statusFilter === 'all' ? 'bg-[var(--color-accent-orange)]/10 text-[var(--color-accent-orange)]' : 'text-white hover:bg-[var(--color-bg-secondary)]'
+                                            }`}
+                                    >
+                                        Tümü
+                                    </button>
+                                    <button
+                                        onClick={() => { setStatusFilter('Tamamlandı'); setShowFilterDropdown(false); }}
+                                        className={`w-full px-4 py-2 text-left text-sm transition-colors ${statusFilter === 'Tamamlandı' ? 'bg-[var(--color-accent-green)]/10 text-[var(--color-accent-green)]' : 'text-white hover:bg-[var(--color-bg-secondary)]'
+                                            }`}
+                                    >
+                                        ✓ Tamamlandı
+                                    </button>
+                                    <button
+                                        onClick={() => { setStatusFilter('Beklemede'); setShowFilterDropdown(false); }}
+                                        className={`w-full px-4 py-2 text-left text-sm transition-colors ${statusFilter === 'Beklemede' ? 'bg-[var(--color-accent-orange)]/10 text-[var(--color-accent-orange)]' : 'text-white hover:bg-[var(--color-bg-secondary)]'
+                                            }`}
+                                    >
+                                        ● Beklemede
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -276,7 +339,16 @@ export default function Dashboard() {
                             </tr>
                         </thead>
                         <tbody>
-                            {recentActivities.map((activity) => (
+                            {filteredActivities.length === 0 ? (
+                                <tr>
+                                    <td colSpan={8} className="py-8 text-center text-[var(--color-text-muted)]">
+                                        {activitySearch || statusFilter !== 'all'
+                                            ? 'Arama kriterlerine uygun aktivite bulunamadı'
+                                            : 'Henüz aktivite yok'
+                                        }
+                                    </td>
+                                </tr>
+                            ) : filteredActivities.map((activity) => (
                                 <tr key={activity.id} className="border-b border-[var(--color-border-glass)] hover:bg-[var(--color-bg-secondary)] transition-colors">
                                     <td className="py-4 px-4">
                                         <input type="checkbox" className="rounded" />
@@ -313,5 +385,91 @@ export default function Dashboard() {
                 </div>
             </Card>
         </MainLayout>
+    );
+}
+
+// Method Balance Card Component
+function MethodBalanceCard({ method }: { method: MethodData }) {
+    // Fetch data entries for this method to calculate current balance
+    const { dataEntries, loading } = useDataEntriesSupabase(method.id);
+
+    // Calculate current balance from entries
+    const currentBalance = useMemo(() => {
+        if (!dataEntries || dataEntries.length === 0) {
+            return method.openingBalance;
+        }
+
+        // Sort entries by date
+        const sorted = [...dataEntries].sort(
+            (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+
+        // Calculate running balance
+        let balance = method.openingBalance;
+        for (const entry of sorted) {
+            const commission = (
+                (entry.entry * method.entryCommission) / 100 +
+                (entry.exit * method.exitCommission) / 100 +
+                (entry.delivery * method.deliveryCommission) / 100
+            );
+            balance = balance + entry.supplement + entry.entry - commission - entry.payment - entry.delivery;
+        }
+
+        return balance;
+    }, [dataEntries, method]);
+
+    // Get color based on balance
+    const getBalanceColor = (balance: number) => {
+        if (balance >= 0) return 'text-[var(--color-accent-green)]';
+        return 'text-[var(--color-accent-red)]';
+    };
+
+    // Generate color for method icon background
+    const colors = [
+        'bg-[var(--color-accent-orange)]/20',
+        'bg-blue-500/20',
+        'bg-purple-500/20',
+        'bg-emerald-500/20',
+        'bg-pink-500/20',
+        'bg-cyan-500/20',
+    ];
+    const iconColors = [
+        'text-[var(--color-accent-orange)]',
+        'text-blue-400',
+        'text-purple-400',
+        'text-emerald-400',
+        'text-pink-400',
+        'text-cyan-400',
+    ];
+    const colorIndex = method.name.charCodeAt(0) % colors.length;
+
+    return (
+        <div className="p-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] hover:border-[var(--color-accent-orange)]/30 transition-all">
+            <div className="flex items-center gap-3 mb-3">
+                <div className={`w-10 h-10 rounded-xl ${colors[colorIndex]} flex items-center justify-center`}>
+                    <Layers className={`w-5 h-5 ${iconColors[colorIndex]}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <p className="text-white font-medium truncate">{method.name}</p>
+                    <p className="text-[var(--color-text-muted)] text-xs">
+                        %{method.entryCommission} / %{method.exitCommission} / %{method.deliveryCommission}
+                    </p>
+                </div>
+            </div>
+            {loading ? (
+                <div className="flex items-center justify-center py-2">
+                    <Loader2 className="w-4 h-4 text-[var(--color-accent-orange)] animate-spin" />
+                </div>
+            ) : (
+                <div>
+                    <p className={`text-xl font-bold ${getBalanceColor(currentBalance)}`}>
+                        ₺{currentBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-[var(--color-text-muted)] text-xs mt-1">
+                        Devir: ₺{method.openingBalance.toLocaleString('tr-TR')}
+                    </p>
+                </div>
+            )}
+        </div>
     );
 }

@@ -42,6 +42,7 @@ export interface AdvanceData {
     id: string;
     personnelId: string;
     companyId: string;
+    methodId?: string;
     amount: number;
     date: string;
     description?: string;
@@ -117,6 +118,7 @@ const mapAdvanceFromDb = (row: Record<string, unknown>): AdvanceData => ({
     id: row.id as string,
     personnelId: row.personnel_id as string,
     companyId: row.company_id as string,
+    methodId: row.method_id as string | undefined,
     amount: row.amount as number,
     date: row.date as string,
     description: row.description as string | undefined,
@@ -126,6 +128,7 @@ const mapAdvanceFromDb = (row: Record<string, unknown>): AdvanceData => ({
 const mapAdvanceToDb = (data: Partial<AdvanceData>) => ({
     ...(data.personnelId && { personnel_id: data.personnelId }),
     ...(data.companyId && { company_id: data.companyId }),
+    ...(data.methodId !== undefined && { method_id: data.methodId || null }),
     ...(data.amount !== undefined && { amount: data.amount }),
     ...(data.date && { date: data.date }),
     ...(data.description !== undefined && { description: data.description || null }),
@@ -501,4 +504,278 @@ export function useAdvancesSupabase() {
     };
 
     return { advances, loading, error, addAdvance, deleteAdvance, refetch: fetchAdvances };
+}
+
+// ============================================
+// Data Entry Type and Hook
+// ============================================
+export interface DataEntryData {
+    id: string;
+    methodId: string;
+    companyId: string;
+    date: string;
+    supplement: number;
+    entry: number;
+    exit: number;
+    commission: number;
+    payment: number;
+    delivery: number;
+    description?: string;
+    balance: number;
+    locked: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+const mapDataEntryFromDb = (row: Record<string, unknown>): DataEntryData => ({
+    id: row.id as string,
+    methodId: row.method_id as string,
+    companyId: row.company_id as string,
+    date: row.date as string,
+    supplement: (row.supplement as number) || 0,
+    entry: (row.entry as number) || 0,
+    exit: (row.exit as number) || 0,
+    commission: (row.commission as number) || 0,
+    payment: (row.payment as number) || 0,
+    delivery: (row.delivery as number) || 0,
+    description: row.description as string | undefined,
+    balance: (row.balance as number) || 0,
+    locked: (row.locked as boolean) || false,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+});
+
+const mapDataEntryToDb = (data: Partial<DataEntryData>) => ({
+    ...(data.methodId && { method_id: data.methodId }),
+    ...(data.companyId && { company_id: data.companyId }),
+    ...(data.date && { date: data.date }),
+    ...(data.supplement !== undefined && { supplement: data.supplement }),
+    ...(data.entry !== undefined && { entry: data.entry }),
+    ...(data.exit !== undefined && { exit: data.exit }),
+    ...(data.commission !== undefined && { commission: data.commission }),
+    ...(data.payment !== undefined && { payment: data.payment }),
+    ...(data.delivery !== undefined && { delivery: data.delivery }),
+    ...(data.description !== undefined && { description: data.description || null }),
+    ...(data.balance !== undefined && { balance: data.balance }),
+    ...(data.locked !== undefined && { locked: data.locked }),
+});
+
+export function useDataEntriesSupabase(methodId?: string) {
+    const [dataEntries, setDataEntries] = useState<DataEntryData[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchDataEntries = useCallback(async () => {
+        if (!isSupabaseConfigured()) {
+            setLoading(false);
+            return;
+        }
+
+        try {
+            setLoading(true);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let query = (supabase as any)
+                .from('data_entries')
+                .select('*')
+                .order('date', { ascending: false });
+
+            if (methodId) {
+                query = query.eq('method_id', methodId);
+            }
+
+            const { data, error: fetchError } = await query;
+
+            if (fetchError) throw fetchError;
+            setDataEntries((data || []).map(mapDataEntryFromDb));
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Bir hata oluştu');
+        } finally {
+            setLoading(false);
+        }
+    }, [methodId]);
+
+    useEffect(() => {
+        fetchDataEntries();
+    }, [fetchDataEntries]);
+
+    const addDataEntry = async (entry: Omit<DataEntryData, 'id' | 'createdAt' | 'updatedAt' | 'companyId'>) => {
+        if (!isSupabaseConfigured()) {
+            const newEntry: DataEntryData = {
+                id: Date.now().toString(),
+                companyId: DEMO_COMPANY_ID,
+                ...entry,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            };
+            setDataEntries((prev) => [newEntry, ...prev]);
+            return newEntry;
+        }
+
+        const dbData = mapDataEntryToDb({ ...entry, companyId: DEMO_COMPANY_ID });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+            .from('data_entries')
+            .insert(dbData)
+            .select()
+            .single();
+
+        if (error) throw error;
+        await fetchDataEntries();
+        return mapDataEntryFromDb(data);
+    };
+
+    const updateDataEntry = async (id: string, updates: Partial<DataEntryData>) => {
+        if (!isSupabaseConfigured()) {
+            setDataEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...updates } : e)));
+            return;
+        }
+
+        const dbData = { ...mapDataEntryToDb(updates), updated_at: new Date().toISOString() };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+            .from('data_entries')
+            .update(dbData)
+            .eq('id', id);
+
+        if (error) throw error;
+        await fetchDataEntries();
+    };
+
+    const deleteDataEntry = async (id: string) => {
+        if (!isSupabaseConfigured()) {
+            setDataEntries((prev) => prev.filter((e) => e.id !== id));
+            return;
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+            .from('data_entries')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+        await fetchDataEntries();
+    };
+
+    return { dataEntries, loading, error, addDataEntry, updateDataEntry, deleteDataEntry, refetch: fetchDataEntries };
+}
+
+// ============================================
+// Companies Type and Hook
+// ============================================
+export interface CompanyData {
+    id: string;
+    name: string;
+    logoUrl?: string;
+    authorizedEmail: string;
+    status: 'active' | 'inactive' | 'pending';
+    createdAt: string;
+}
+
+const mapCompanyFromDb = (row: Record<string, unknown>): CompanyData => ({
+    id: row.id as string,
+    name: row.name as string,
+    logoUrl: row.logo_url as string | undefined,
+    authorizedEmail: row.authorized_email as string,
+    status: row.status as 'active' | 'inactive' | 'pending',
+    createdAt: row.created_at as string,
+});
+
+const mapCompanyToDb = (data: Partial<CompanyData>) => ({
+    ...(data.name && { name: data.name }),
+    ...(data.logoUrl !== undefined && { logo_url: data.logoUrl || null }),
+    ...(data.authorizedEmail && { authorized_email: data.authorizedEmail }),
+    ...(data.status && { status: data.status }),
+});
+
+export function useCompaniesSupabase() {
+    const [companies, setCompanies] = useState<CompanyData[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchCompanies = useCallback(async () => {
+        if (!isSupabaseConfigured()) {
+            setLoading(false);
+            return;
+        }
+
+        try {
+            setLoading(true);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data, error: fetchError } = await (supabase as any)
+                .from('companies')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (fetchError) throw fetchError;
+            setCompanies((data || []).map(mapCompanyFromDb));
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Bir hata oluştu');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchCompanies();
+    }, [fetchCompanies]);
+
+    const addCompany = async (company: Omit<CompanyData, 'id' | 'createdAt'>) => {
+        if (!isSupabaseConfigured()) {
+            const newCompany: CompanyData = {
+                id: Date.now().toString(),
+                ...company,
+                createdAt: new Date().toISOString(),
+            };
+            setCompanies((prev) => [newCompany, ...prev]);
+            return newCompany;
+        }
+
+        const dbData = mapCompanyToDb(company);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+            .from('companies')
+            .insert(dbData)
+            .select()
+            .single();
+
+        if (error) throw error;
+        await fetchCompanies();
+        return mapCompanyFromDb(data);
+    };
+
+    const updateCompany = async (id: string, updates: Partial<CompanyData>) => {
+        if (!isSupabaseConfigured()) {
+            setCompanies((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+            return;
+        }
+
+        const dbData = mapCompanyToDb(updates);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+            .from('companies')
+            .update(dbData)
+            .eq('id', id);
+
+        if (error) throw error;
+        await fetchCompanies();
+    };
+
+    const deleteCompany = async (id: string) => {
+        if (!isSupabaseConfigured()) {
+            setCompanies((prev) => prev.filter((c) => c.id !== id));
+            return;
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+            .from('companies')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+        await fetchCompanies();
+    };
+
+    return { companies, loading, error, addCompany, updateCompany, deleteCompany, refetch: fetchCompanies };
 }

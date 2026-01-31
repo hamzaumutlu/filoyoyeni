@@ -8,6 +8,9 @@ import {
     Wallet,
     FileText,
     Calendar,
+    Loader2,
+    History,
+    Layers,
 } from 'lucide-react';
 import {
     useReactTable,
@@ -18,7 +21,28 @@ import {
 } from '@tanstack/react-table';
 import { MainLayout } from '../components/layout';
 import { Card, Button, Modal, Input, Select } from '../components/ui';
-import type { Personnel, Advance } from '../types';
+import { usePersonnelSupabase, useAdvancesSupabase, useMethodsSupabase, type PersonnelData, type AdvanceData, type MethodData } from '../hooks/useSupabase';
+
+// Local Types for UI
+interface PersonnelUI {
+    id: string;
+    name: string;
+    department: string;
+    baseSalary: number;
+    startDate: Date;
+    note?: string;
+    companyId?: string;
+}
+
+interface AdvanceUI {
+    id: string;
+    personnelId: string;
+    methodId?: string;
+    amount: number;
+    date: Date;
+    description?: string;
+    companyId?: string;
+}
 
 // Departments
 const departments = [
@@ -27,39 +51,6 @@ const departments = [
     { value: 'satis', label: 'Satış' },
     { value: 'teknik', label: 'Teknik Servis' },
     { value: 'yonetim', label: 'Yönetim' },
-];
-
-// Mock data
-const mockPersonnel: Personnel[] = [
-    {
-        id: '1',
-        name: 'Ahmet Yılmaz',
-        department: 'operasyon',
-        baseSalary: 45000,
-        startDate: new Date('2023-06-15'),
-        note: 'Kıdemli çalışan, araç teslim sorumlusu',
-    },
-    {
-        id: '2',
-        name: 'Fatma Demir',
-        department: 'muhasebe',
-        baseSalary: 38000,
-        startDate: new Date('2024-01-10'),
-        note: 'Mali işler uzmanı',
-    },
-    {
-        id: '3',
-        name: 'Mehmet Kaya',
-        department: 'satis',
-        baseSalary: 42000,
-        startDate: new Date('2023-09-01'),
-    },
-];
-
-const mockAdvances: Advance[] = [
-    { id: '1', personnelId: '1', amount: 5000, date: new Date('2026-01-05'), description: 'Kira ödemesi' },
-    { id: '2', personnelId: '1', amount: 3000, date: new Date('2026-01-15'), description: 'Acil ihtiyaç' },
-    { id: '3', personnelId: '2', amount: 2000, date: new Date('2026-01-10') },
 ];
 
 interface PersonnelFormData {
@@ -72,18 +63,62 @@ interface PersonnelFormData {
 
 interface AdvanceFormData {
     personnelId: string;
+    methodId: string;
     amount: string;
     date: string;
     description: string;
 }
 
 export default function PersonnelPage() {
-    const [personnel, setPersonnel] = useState<Personnel[]>(mockPersonnel);
-    const [advances, setAdvances] = useState<Advance[]>(mockAdvances);
+    // Use Supabase hooks
+    const {
+        personnel: rawPersonnel,
+        loading: personnelLoading,
+        addPersonnel,
+        updatePersonnel,
+        deletePersonnel: deletePersonnelFromDB,
+    } = usePersonnelSupabase();
+
+    const {
+        advances: rawAdvances,
+        loading: advancesLoading,
+        addAdvance,
+    } = useAdvancesSupabase();
+
+    // Get methods for payment method selection
+    const { methods: rawMethods, loading: methodsLoading } = useMethodsSupabase();
+    const methods = useMemo(() => rawMethods.filter((m: MethodData) => m.status === 'active'), [rawMethods]);
+
+    // Transform database data to UI format (useSupabase hooks already return camelCase)
+    const personnel: PersonnelUI[] = useMemo(() =>
+        rawPersonnel.map((p: PersonnelData) => ({
+            id: p.id,
+            name: p.name,
+            department: p.department,
+            baseSalary: p.baseSalary,
+            startDate: new Date(p.startDate),
+            note: p.note || undefined,
+            companyId: p.companyId,
+        })), [rawPersonnel]);
+
+    const advances: AdvanceUI[] = useMemo(() =>
+        rawAdvances.map((a: AdvanceData) => ({
+            id: a.id,
+            personnelId: a.personnelId,
+            methodId: a.methodId,
+            amount: a.amount,
+            date: new Date(a.date),
+            description: a.description || undefined,
+            companyId: a.companyId,
+        })), [rawAdvances]);
+
     const [isPersonnelModalOpen, setIsPersonnelModalOpen] = useState(false);
     const [isAdvanceModalOpen, setIsAdvanceModalOpen] = useState(false);
-    const [editingPersonnel, setEditingPersonnel] = useState<Personnel | null>(null);
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    const [historyPersonnelId, setHistoryPersonnelId] = useState<string>('');
+    const [editingPersonnel, setEditingPersonnel] = useState<PersonnelUI | null>(null);
     const [globalFilter, setGlobalFilter] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [personnelForm, setPersonnelForm] = useState<PersonnelFormData>({
         name: '',
@@ -95,6 +130,7 @@ export default function PersonnelPage() {
 
     const [advanceForm, setAdvanceForm] = useState<AdvanceFormData>({
         personnelId: '',
+        methodId: '',
         amount: '',
         date: new Date().toISOString().split('T')[0],
         description: '',
@@ -130,6 +166,21 @@ export default function PersonnelPage() {
             };
         });
     }, [personnel, advances]);
+
+    // Get personnel advances for history modal
+    const getPersonnelAdvances = (personnelId: string) => {
+        return advances
+            .filter(a => a.personnelId === personnelId)
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    };
+
+    const openHistoryModal = (personnelId: string) => {
+        setHistoryPersonnelId(personnelId);
+        setIsHistoryModalOpen(true);
+    };
+
+    const historyPersonnel = personnel.find(p => p.id === historyPersonnelId);
+    const historyAdvances = historyPersonnelId ? getPersonnelAdvances(historyPersonnelId) : [];
 
     const columns: ColumnDef<typeof enhancedPersonnel[0]>[] = [
         {
@@ -216,6 +267,13 @@ export default function PersonnelPage() {
             cell: ({ row }) => (
                 <div className="flex items-center gap-1">
                     <button
+                        onClick={() => openHistoryModal(row.original.id)}
+                        className="p-2 rounded-lg hover:bg-[var(--color-bg-secondary)] transition-colors text-[var(--color-text-muted)] hover:text-blue-400"
+                        title="Avans Geçmişi"
+                    >
+                        <History className="w-4 h-4" />
+                    </button>
+                    <button
                         onClick={() => openAdvanceModal(row.original.id)}
                         className="p-2 rounded-lg hover:bg-[var(--color-accent-orange)]/10 transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-accent-orange)]"
                         title="Avans Ekle"
@@ -248,7 +306,7 @@ export default function PersonnelPage() {
         onGlobalFilterChange: setGlobalFilter,
     });
 
-    const handleEdit = (p: Personnel) => {
+    const handleEdit = (p: PersonnelUI) => {
         setEditingPersonnel(p);
         setPersonnelForm({
             name: p.name,
@@ -260,14 +318,20 @@ export default function PersonnelPage() {
         setIsPersonnelModalOpen(true);
     };
 
-    const handleDelete = (id: string) => {
-        setPersonnel(personnel.filter((p) => p.id !== id));
-        setAdvances(advances.filter((a) => a.personnelId !== id));
+    const handleDelete = async (id: string) => {
+        if (!confirm('Bu personeli silmek istediğinize emin misiniz?')) return;
+        try {
+            await deletePersonnelFromDB(id);
+        } catch (err) {
+            console.error('Delete error:', err);
+            alert('Silme işlemi başarısız oldu');
+        }
     };
 
     const openAdvanceModal = (personnelId: string) => {
         setAdvanceForm({
             personnelId,
+            methodId: methods.length > 0 ? methods[0].id : '',
             amount: '',
             date: new Date().toISOString().split('T')[0],
             description: '',
@@ -275,52 +339,56 @@ export default function PersonnelPage() {
         setIsAdvanceModalOpen(true);
     };
 
-    const handlePersonnelSubmit = (e: React.FormEvent) => {
+    const handlePersonnelSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setIsSubmitting(true);
 
-        if (editingPersonnel) {
-            setPersonnel(
-                personnel.map((p) =>
-                    p.id === editingPersonnel.id
-                        ? {
-                            ...p,
-                            name: personnelForm.name,
-                            department: personnelForm.department,
-                            baseSalary: parseFloat(personnelForm.baseSalary),
-                            startDate: new Date(personnelForm.startDate),
-                            note: personnelForm.note || undefined,
-                        }
-                        : p
-                )
-            );
-        } else {
-            const newPersonnel: Personnel = {
-                id: Date.now().toString(),
-                name: personnelForm.name,
-                department: personnelForm.department,
-                baseSalary: parseFloat(personnelForm.baseSalary),
-                startDate: new Date(personnelForm.startDate),
-                note: personnelForm.note || undefined,
-            };
-            setPersonnel([...personnel, newPersonnel]);
+        try {
+            if (editingPersonnel) {
+                await updatePersonnel(editingPersonnel.id, {
+                    name: personnelForm.name,
+                    department: personnelForm.department,
+                    baseSalary: parseFloat(personnelForm.baseSalary),
+                    startDate: personnelForm.startDate,
+                    note: personnelForm.note || undefined,
+                });
+            } else {
+                await addPersonnel({
+                    name: personnelForm.name,
+                    department: personnelForm.department,
+                    baseSalary: parseFloat(personnelForm.baseSalary),
+                    startDate: personnelForm.startDate,
+                    note: personnelForm.note || undefined,
+                });
+            }
+            resetPersonnelForm();
+        } catch (err) {
+            console.error('Submit error:', err);
+            alert('İşlem başarısız oldu: ' + (err instanceof Error ? err.message : 'Bilinmeyen hata'));
+        } finally {
+            setIsSubmitting(false);
         }
-
-        resetPersonnelForm();
     };
 
-    const handleAdvanceSubmit = (e: React.FormEvent) => {
+    const handleAdvanceSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setIsSubmitting(true);
 
-        const newAdvance: Advance = {
-            id: Date.now().toString(),
-            personnelId: advanceForm.personnelId,
-            amount: parseFloat(advanceForm.amount),
-            date: new Date(advanceForm.date),
-            description: advanceForm.description || undefined,
-        };
-
-        setAdvances([...advances, newAdvance]);
-        setIsAdvanceModalOpen(false);
+        try {
+            await addAdvance({
+                personnelId: advanceForm.personnelId,
+                methodId: advanceForm.methodId || undefined,
+                amount: parseFloat(advanceForm.amount),
+                date: advanceForm.date,
+                description: advanceForm.description || undefined,
+            });
+            setIsAdvanceModalOpen(false);
+        } catch (err) {
+            console.error('Advance submit error:', err);
+            alert('Avans eklenemedi: ' + (err instanceof Error ? err.message : 'Bilinmeyen hata'));
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const resetPersonnelForm = () => {
@@ -344,6 +412,8 @@ export default function PersonnelPage() {
             return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
         })
         .reduce((sum, a) => sum + a.amount, 0);
+
+    const isLoading = personnelLoading || advancesLoading || methodsLoading;
 
     return (
         <MainLayout breadcrumb={['Personel']}>
@@ -420,46 +490,54 @@ export default function PersonnelPage() {
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            {table.getHeaderGroups().map((headerGroup) => (
-                                <tr key={headerGroup.id} className="border-b border-[var(--color-border-glass)]">
-                                    {headerGroup.headers.map((header) => (
-                                        <th
-                                            key={header.id}
-                                            className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium"
-                                        >
-                                            {header.isPlaceholder
-                                                ? null
-                                                : flexRender(header.column.columnDef.header, header.getContext())}
-                                        </th>
-                                    ))}
-                                </tr>
-                            ))}
-                        </thead>
-                        <tbody>
-                            {table.getRowModel().rows.map((row) => (
-                                <tr
-                                    key={row.id}
-                                    className="border-b border-[var(--color-border-glass)] hover:bg-[var(--color-bg-secondary)] transition-colors"
-                                >
-                                    {row.getVisibleCells().map((cell) => (
-                                        <td key={cell.id} className="py-4 px-4">
-                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-
-                {table.getRowModel().rows.length === 0 && (
-                    <div className="text-center py-12">
-                        <Users className="w-12 h-12 mx-auto text-[var(--color-text-muted)] mb-4" />
-                        <p className="text-[var(--color-text-secondary)]">Henüz personel eklenmemiş</p>
+                {isLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                        <Loader2 className="w-8 h-8 text-[var(--color-accent-orange)] animate-spin" />
                     </div>
+                ) : (
+                    <>
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    {table.getHeaderGroups().map((headerGroup) => (
+                                        <tr key={headerGroup.id} className="border-b border-[var(--color-border-glass)]">
+                                            {headerGroup.headers.map((header) => (
+                                                <th
+                                                    key={header.id}
+                                                    className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium"
+                                                >
+                                                    {header.isPlaceholder
+                                                        ? null
+                                                        : flexRender(header.column.columnDef.header, header.getContext())}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                </thead>
+                                <tbody>
+                                    {table.getRowModel().rows.map((row) => (
+                                        <tr
+                                            key={row.id}
+                                            className="border-b border-[var(--color-border-glass)] hover:bg-[var(--color-bg-secondary)] transition-colors"
+                                        >
+                                            {row.getVisibleCells().map((cell) => (
+                                                <td key={cell.id} className="py-4 px-4">
+                                                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {table.getRowModel().rows.length === 0 && (
+                            <div className="text-center py-12">
+                                <Users className="w-12 h-12 mx-auto text-[var(--color-text-muted)] mb-4" />
+                                <p className="text-[var(--color-text-secondary)]">Henüz personel eklenmemiş</p>
+                            </div>
+                        )}
+                    </>
                 )}
             </Card>
 
@@ -523,7 +601,10 @@ export default function PersonnelPage() {
                         <Button variant="ghost" type="button" onClick={resetPersonnelForm}>
                             İptal
                         </Button>
-                        <Button type="submit">
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : null}
                             {editingPersonnel ? 'Güncelle' : 'Ekle'}
                         </Button>
                     </div>
@@ -545,6 +626,14 @@ export default function PersonnelPage() {
                         value={advanceForm.personnelId}
                         onChange={(e) => setAdvanceForm({ ...advanceForm, personnelId: e.target.value })}
                         required
+                    />
+
+                    <Select
+                        label="Ödeme Yöntemi"
+                        options={methods.map((m) => ({ value: m.id, label: m.name }))}
+                        placeholder="Yöntem seçin"
+                        value={advanceForm.methodId}
+                        onChange={(e) => setAdvanceForm({ ...advanceForm, methodId: e.target.value })}
                     />
 
                     <div className="grid grid-cols-2 gap-4">
@@ -572,6 +661,7 @@ export default function PersonnelPage() {
                         onChange={(e) => setAdvanceForm({ ...advanceForm, description: e.target.value })}
                     />
 
+
                     {/* Show person's current advance status */}
                     {advanceForm.personnelId && (
                         <div className="p-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)]">
@@ -597,12 +687,100 @@ export default function PersonnelPage() {
                         <Button variant="ghost" type="button" onClick={() => setIsAdvanceModalOpen(false)}>
                             İptal
                         </Button>
-                        <Button type="submit">
-                            <Wallet className="w-4 h-4 mr-2" />
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <Wallet className="w-4 h-4 mr-2" />
+                            )}
                             Avans Ekle
                         </Button>
                     </div>
                 </form>
+            </Modal>
+
+            {/* Advance History Modal */}
+            <Modal
+                isOpen={isHistoryModalOpen}
+                onClose={() => setIsHistoryModalOpen(false)}
+                title={`Avans Geçmişi - ${historyPersonnel?.name || ''}`}
+                size="lg"
+            >
+                <div className="space-y-4">
+                    {historyAdvances.length === 0 ? (
+                        <div className="text-center py-8">
+                            <Wallet className="w-12 h-12 mx-auto text-[var(--color-text-muted)] mb-4" />
+                            <p className="text-[var(--color-text-secondary)]">Henüz avans kaydı bulunmuyor</p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Summary */}
+                            <div className="p-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)]">
+                                <div className="grid grid-cols-3 gap-4 text-center">
+                                    <div>
+                                        <p className="text-[var(--color-text-muted)] text-xs uppercase">Toplam Avans</p>
+                                        <p className="text-xl font-bold text-[var(--color-accent-orange)]">
+                                            ₺{historyAdvances.reduce((sum, a) => sum + a.amount, 0).toLocaleString('tr-TR')}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[var(--color-text-muted)] text-xs uppercase">İşlem Sayısı</p>
+                                        <p className="text-xl font-bold text-white">{historyAdvances.length}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[var(--color-text-muted)] text-xs uppercase">Son Avans</p>
+                                        <p className="text-xl font-bold text-white">
+                                            {historyAdvances[0]?.date.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' })}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* History List */}
+                            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                                {historyAdvances.map((advance) => (
+                                    <div
+                                        key={advance.id}
+                                        className="flex items-center justify-between p-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] hover:border-[var(--color-accent-orange)]/30 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 rounded-xl bg-[var(--color-accent-orange)]/20 flex items-center justify-center">
+                                                <Calendar className="w-5 h-5 text-[var(--color-accent-orange)]" />
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-white font-medium">
+                                                        {advance.date.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                                    </span>
+                                                    {advance.methodId && (
+                                                        <span className="px-2 py-0.5 rounded-full text-xs bg-blue-500/20 text-blue-400 flex items-center gap-1">
+                                                            <Layers className="w-3 h-3" />
+                                                            {methods.find(m => m.id === advance.methodId)?.name || 'Bilinmeyen'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {advance.description && (
+                                                    <p className="text-sm text-[var(--color-text-muted)]">
+                                                        {advance.description}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <span className="text-lg font-semibold text-[var(--color-accent-orange)]">
+                                            ₺{advance.amount.toLocaleString('tr-TR')}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
+
+                    <div className="flex justify-end pt-4 border-t border-[var(--color-border-glass)]">
+                        <Button variant="ghost" onClick={() => setIsHistoryModalOpen(false)}>
+                            Kapat
+                        </Button>
+                    </div>
+                </div>
             </Modal>
         </MainLayout>
     );

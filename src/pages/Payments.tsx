@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
     CreditCard,
     Plus,
@@ -8,6 +8,7 @@ import {
     Calendar,
     TrendingDown,
     Layers,
+    Loader2,
 } from 'lucide-react';
 import {
     useReactTable,
@@ -20,23 +21,7 @@ import {
 } from '@tanstack/react-table';
 import { MainLayout } from '../components/layout';
 import { Card, Button, Modal, Input, Select } from '../components/ui';
-import type { Payment, Method } from '../types';
-
-// Mock methods for reference
-const mockMethods: Method[] = [
-    { id: '1', name: 'Yolcu360', entryCommission: 2.5, exitCommission: 1.5, deliveryCommission: 3.0, openingBalance: 50000, status: 'active' },
-    { id: '2', name: 'Enuygun', entryCommission: 2.0, exitCommission: 1.0, deliveryCommission: 2.5, openingBalance: 35000, status: 'active' },
-    { id: '3', name: 'BiTaksi', entryCommission: 3.0, exitCommission: 2.0, deliveryCommission: 2.0, openingBalance: 20000, status: 'inactive' },
-];
-
-// Mock payments
-const mockPayments: Payment[] = [
-    { id: '1', date: new Date('2026-01-28'), description: 'Araç Sigorta Ödemesi', amount: 8500, methodId: '1' },
-    { id: '2', date: new Date('2026-01-27'), description: 'Ofis Kirası', amount: 15000 },
-    { id: '3', date: new Date('2026-01-25'), description: 'Benzin Gideri', amount: 3200, methodId: '2' },
-    { id: '4', date: new Date('2026-01-24'), description: 'Araç Bakım', amount: 4800, methodId: '1' },
-    { id: '5', date: new Date('2026-01-22'), description: 'Personel Yemeği', amount: 1200 },
-];
+import { usePaymentsSupabase, useMethodsSupabase, type PaymentData, type MethodData } from '../hooks/useSupabase';
 
 interface FormData {
     date: string;
@@ -46,12 +31,25 @@ interface FormData {
 }
 
 export default function Payments() {
-    const [payments, setPayments] = useState<Payment[]>(mockPayments);
-    const [methods] = useState<Method[]>(mockMethods);
+    // Use Supabase hooks
+    const { payments: rawPayments, loading: paymentsLoading, addPayment, updatePayment, deletePayment } = usePaymentsSupabase();
+    const { methods: rawMethods, loading: methodsLoading } = useMethodsSupabase();
+
+    // Transform to UI format with Date objects for sorting
+    const payments = useMemo(() =>
+        rawPayments.map((p: PaymentData) => ({
+            ...p,
+            date: new Date(p.date),
+        })), [rawPayments]);
+
+    const methods = useMemo(() =>
+        rawMethods.filter((m: MethodData) => m.status === 'active'), [rawMethods]);
+
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+    const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
     const [globalFilter, setGlobalFilter] = useState('');
     const [sorting, setSorting] = useState<SortingState>([{ id: 'date', desc: true }]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [formData, setFormData] = useState<FormData>({
         date: new Date().toISOString().split('T')[0],
@@ -60,7 +58,7 @@ export default function Payments() {
         methodId: '',
     });
 
-    const columns: ColumnDef<Payment>[] = [
+    const columns: ColumnDef<typeof payments[0]>[] = [
         {
             accessorKey: 'date',
             header: 'Tarih',
@@ -101,7 +99,7 @@ export default function Payments() {
             header: 'İlgili Yöntem',
             cell: ({ getValue }) => {
                 const methodId = getValue() as string | undefined;
-                const method = methods.find((m) => m.id === methodId);
+                const method = rawMethods.find((m: MethodData) => m.id === methodId);
                 return method ? (
                     <div className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-md bg-[var(--color-accent-orange)]/20 flex items-center justify-center">
@@ -147,8 +145,8 @@ export default function Payments() {
         onSortingChange: setSorting,
     });
 
-    const handleEdit = (payment: Payment) => {
-        setEditingPayment(payment);
+    const handleEdit = (payment: typeof payments[0]) => {
+        setEditingPaymentId(payment.id);
         setFormData({
             date: new Date(payment.date).toISOString().split('T')[0],
             description: payment.description,
@@ -158,39 +156,43 @@ export default function Payments() {
         setIsModalOpen(true);
     };
 
-    const handleDelete = (id: string) => {
-        setPayments(payments.filter((p) => p.id !== id));
+    const handleDelete = async (id: string) => {
+        if (!confirm('Bu ödemeyi silmek istediğinize emin misiniz?')) return;
+        try {
+            await deletePayment(id);
+        } catch (err) {
+            console.error('Delete error:', err);
+            alert('Silme işlemi başarısız oldu');
+        }
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setIsSubmitting(true);
 
-        if (editingPayment) {
-            setPayments(
-                payments.map((p) =>
-                    p.id === editingPayment.id
-                        ? {
-                            ...p,
-                            date: new Date(formData.date),
-                            description: formData.description,
-                            amount: parseFloat(formData.amount),
-                            methodId: formData.methodId || undefined,
-                        }
-                        : p
-                )
-            );
-        } else {
-            const newPayment: Payment = {
-                id: Date.now().toString(),
-                date: new Date(formData.date),
-                description: formData.description,
-                amount: parseFloat(formData.amount),
-                methodId: formData.methodId || undefined,
-            };
-            setPayments([newPayment, ...payments]);
+        try {
+            if (editingPaymentId) {
+                await updatePayment(editingPaymentId, {
+                    date: formData.date,
+                    description: formData.description,
+                    amount: parseFloat(formData.amount),
+                    methodId: formData.methodId || undefined,
+                });
+            } else {
+                await addPayment({
+                    date: formData.date,
+                    description: formData.description,
+                    amount: parseFloat(formData.amount),
+                    methodId: formData.methodId || undefined,
+                });
+            }
+            resetForm();
+        } catch (err) {
+            console.error('Submit error:', err);
+            alert('İşlem başarısız oldu: ' + (err instanceof Error ? err.message : 'Bilinmeyen hata'));
+        } finally {
+            setIsSubmitting(false);
         }
-
-        resetForm();
     };
 
     const resetForm = () => {
@@ -200,7 +202,7 @@ export default function Payments() {
             amount: '',
             methodId: '',
         });
-        setEditingPayment(null);
+        setEditingPaymentId(null);
         setIsModalOpen(false);
     };
 
@@ -208,6 +210,8 @@ export default function Payments() {
     const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
     const methodPayments = payments.filter((p) => p.methodId).reduce((sum, p) => sum + p.amount, 0);
     const generalPayments = payments.filter((p) => !p.methodId).reduce((sum, p) => sum + p.amount, 0);
+
+    const isLoading = paymentsLoading || methodsLoading;
 
     return (
         <MainLayout breadcrumb={['Ödemeler']}>
@@ -291,48 +295,54 @@ export default function Payments() {
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            {table.getHeaderGroups().map((headerGroup) => (
-                                <tr key={headerGroup.id} className="border-b border-[var(--color-border-glass)]">
-                                    {headerGroup.headers.map((header) => (
-                                        <th
-                                            key={header.id}
-                                            className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium cursor-pointer hover:text-white"
-                                            onClick={header.column.getToggleSortingHandler()}
-                                        >
-                                            <div className="flex items-center gap-1">
-                                                {header.isPlaceholder
-                                                    ? null
-                                                    : flexRender(header.column.columnDef.header, header.getContext())}
-                                                {header.column.getIsSorted() && (
-                                                    <span>{header.column.getIsSorted() === 'desc' ? '↓' : '↑'}</span>
-                                                )}
-                                            </div>
-                                        </th>
-                                    ))}
-                                </tr>
-                            ))}
-                        </thead>
-                        <tbody>
-                            {table.getRowModel().rows.map((row) => (
-                                <tr
-                                    key={row.id}
-                                    className="border-b border-[var(--color-border-glass)] hover:bg-[var(--color-bg-secondary)] transition-colors"
-                                >
-                                    {row.getVisibleCells().map((cell) => (
-                                        <td key={cell.id} className="py-4 px-4">
-                                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                {isLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                        <Loader2 className="w-8 h-8 text-[var(--color-accent-orange)] animate-spin" />
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                {table.getHeaderGroups().map((headerGroup) => (
+                                    <tr key={headerGroup.id} className="border-b border-[var(--color-border-glass)]">
+                                        {headerGroup.headers.map((header) => (
+                                            <th
+                                                key={header.id}
+                                                className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium cursor-pointer hover:text-white"
+                                                onClick={header.column.getToggleSortingHandler()}
+                                            >
+                                                <div className="flex items-center gap-1">
+                                                    {header.isPlaceholder
+                                                        ? null
+                                                        : flexRender(header.column.columnDef.header, header.getContext())}
+                                                    {header.column.getIsSorted() && (
+                                                        <span>{header.column.getIsSorted() === 'desc' ? '↓' : '↑'}</span>
+                                                    )}
+                                                </div>
+                                            </th>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </thead>
+                            <tbody>
+                                {table.getRowModel().rows.map((row) => (
+                                    <tr
+                                        key={row.id}
+                                        className="border-b border-[var(--color-border-glass)] hover:bg-[var(--color-bg-secondary)] transition-colors"
+                                    >
+                                        {row.getVisibleCells().map((cell) => (
+                                            <td key={cell.id} className="py-4 px-4">
+                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
 
-                {table.getRowModel().rows.length === 0 && (
+                {!isLoading && table.getRowModel().rows.length === 0 && (
                     <div className="text-center py-12">
                         <CreditCard className="w-12 h-12 mx-auto text-[var(--color-text-muted)] mb-4" />
                         <p className="text-[var(--color-text-secondary)]">Henüz ödeme eklenmemiş</p>
@@ -344,7 +354,7 @@ export default function Payments() {
             <Modal
                 isOpen={isModalOpen}
                 onClose={resetForm}
-                title={editingPayment ? 'Ödemeyi Düzenle' : 'Yeni Ödeme Ekle'}
+                title={editingPaymentId ? 'Ödemeyi Düzenle' : 'Yeni Ödeme Ekle'}
                 size="md"
             >
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -377,7 +387,7 @@ export default function Payments() {
                         label="İlgili Yöntem (Opsiyonel)"
                         options={[
                             { value: '', label: 'Genel Gider (Yöntem Yok)' },
-                            ...methods.filter((m) => m.status === 'active').map((m) => ({ value: m.id, label: m.name })),
+                            ...methods.map((m: MethodData) => ({ value: m.id, label: m.name })),
                         ]}
                         value={formData.methodId}
                         onChange={(e) => setFormData({ ...formData, methodId: e.target.value })}
@@ -386,7 +396,7 @@ export default function Payments() {
                     {formData.methodId && (
                         <div className="p-3 rounded-lg bg-[var(--color-accent-orange)]/10 border border-[var(--color-accent-orange)]/20">
                             <p className="text-sm text-[var(--color-text-secondary)]">
-                                <span className="text-[var(--color-accent-orange)]">●</span> Bu ödeme, "{methods.find((m) => m.id === formData.methodId)?.name}" yönteminin veri giriş tablosuna otomatik eklenecektir.
+                                <span className="text-[var(--color-accent-orange)]">●</span> Bu ödeme, "{methods.find((m: MethodData) => m.id === formData.methodId)?.name}" yönteminin veri giriş tablosuna otomatik eklenecektir.
                             </p>
                         </div>
                     )}
@@ -395,8 +405,11 @@ export default function Payments() {
                         <Button variant="ghost" type="button" onClick={resetForm}>
                             İptal
                         </Button>
-                        <Button type="submit">
-                            {editingPayment ? 'Güncelle' : 'Ekle'}
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : null}
+                            {editingPaymentId ? 'Güncelle' : 'Ekle'}
                         </Button>
                     </div>
                 </form>
