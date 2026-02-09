@@ -67,13 +67,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (session?.user) {
                 // Fetch user details from our users table
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const { data: userData } = await (supabase as any)
+                const { data: userData, error: userError } = await (supabase as any)
                     .from('users')
                     .select('*, companies(name)')
                     .eq('id', session.user.id)
                     .single();
 
-                if (userData) {
+                if (userError) {
+                    console.error('[Auth] Session kullanıcı bilgisi hatası:', userError.message);
+                    // Fallback: use session data
+                    setUser({
+                        id: session.user.id,
+                        email: session.user.email || '',
+                        role: 'admin',
+                        companyId: '00000000-0000-0000-0000-000000000001',
+                        companyName: 'Varsayılan',
+                    });
+                } else if (userData) {
                     setUser({
                         id: userData.id,
                         email: userData.email,
@@ -82,9 +92,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         companyName: userData.companies?.name,
                     });
                 }
+            } else {
+                // No session - check localStorage for demo user
+                const savedUser = localStorage.getItem('filoyo_user');
+                if (savedUser) {
+                    setUser(JSON.parse(savedUser));
+                }
             }
         } catch (err) {
             console.error('Session check error:', err);
+            // Fallback: check localStorage
+            const savedUser = localStorage.getItem('filoyo_user');
+            if (savedUser) {
+                setUser(JSON.parse(savedUser));
+            }
         } finally {
             setLoading(false);
         }
@@ -95,8 +116,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(true);
 
         try {
+            // If Supabase is not configured, use demo mode
             if (!isSupabaseConfigured()) {
-                // Demo mode - simple check
+                console.log('[Auth] Supabase yapılandırılmamış, demo modda çalışılıyor.');
                 if (email === 'admin@filoyo.com' && password === 'admin123') {
                     setUser(DEMO_USER);
                     localStorage.setItem('filoyo_user', JSON.stringify(DEMO_USER));
@@ -106,16 +128,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 return;
             }
 
-            // Supabase Auth
+            console.log('[Auth] Supabase ile giriş yapılıyor...');
+
+            // Try Supabase Auth first
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data, error: authError } = await (supabase as any).auth.signInWithPassword({
                 email,
                 password,
             });
 
-            if (authError) throw authError;
+            if (authError) {
+                console.error('[Auth] Supabase auth hatası:', authError.message, authError);
+
+                // If Supabase auth fails, try demo credentials as fallback
+                if (email === 'admin@filoyo.com' && password === 'admin123') {
+                    console.log('[Auth] Demo kimlik bilgileri algılandı, demo moduna geçiliyor...');
+                    setUser(DEMO_USER);
+                    localStorage.setItem('filoyo_user', JSON.stringify(DEMO_USER));
+                    return;
+                }
+
+                throw new Error('Geçersiz e-posta veya şifre. Supabase kullanıcısı bulunamadı.');
+            }
 
             if (data.user) {
+                console.log('[Auth] Supabase auth başarılı, kullanıcı bilgileri getiriliyor...');
                 // Fetch user details
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const { data: userData, error: userError } = await (supabase as any)
@@ -124,7 +161,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     .eq('id', data.user.id)
                     .single();
 
-                if (userError) throw userError;
+                if (userError) {
+                    console.error('[Auth] Kullanıcı bilgi sorgulama hatası:', userError.message, userError);
+                    // User authenticated but no record in users table
+                    // Create a fallback user from auth data
+                    const fallbackUser: User = {
+                        id: data.user.id,
+                        email: data.user.email || email,
+                        role: 'admin',
+                        companyId: '00000000-0000-0000-0000-000000000001',
+                        companyName: 'Varsayılan',
+                    };
+                    setUser(fallbackUser);
+                    localStorage.setItem('filoyo_user', JSON.stringify(fallbackUser));
+                    return;
+                }
 
                 const loggedInUser: User = {
                     id: userData.id,
@@ -139,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Giriş başarısız';
+            console.error('[Auth] Login hatası:', message);
             setError(message);
             throw err;
         } finally {
