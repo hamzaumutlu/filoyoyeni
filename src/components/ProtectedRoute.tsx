@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
@@ -15,8 +16,16 @@ export default function ProtectedRoute({
 }: ProtectedRouteProps) {
     const { user, loading, isAdmin, isSuperAdmin } = useAuth();
     const location = useLocation();
+    const [timedOut, setTimedOut] = useState(false);
 
-    if (loading) {
+    // If loading takes more than 3 seconds, stop waiting and redirect to login
+    useEffect(() => {
+        if (!loading) return;
+        const timer = setTimeout(() => setTimedOut(true), 3000);
+        return () => clearTimeout(timer);
+    }, [loading]);
+
+    if (loading && !timedOut) {
         return (
             <div className="min-h-screen bg-[var(--color-bg-primary)] flex items-center justify-center">
                 <div className="text-center">
@@ -28,7 +37,6 @@ export default function ProtectedRoute({
     }
 
     if (!user) {
-        // Redirect to login, saving the attempted URL
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 

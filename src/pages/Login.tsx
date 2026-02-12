@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Car, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
     const navigate = useNavigate();
-    const { login, loading } = useAuth();
+    const { login, user } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -28,12 +28,9 @@ export default function LoginPage() {
         }
     };
 
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-[var(--color-bg-primary)] flex items-center justify-center">
-                <Loader2 className="w-8 h-8 text-[var(--color-accent-orange)] animate-spin" />
-            </div>
-        );
+    // If already authenticated, redirect to dashboard
+    if (user) {
+        return <Navigate to="/" replace />;
     }
 
     return (

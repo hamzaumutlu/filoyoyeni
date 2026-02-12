@@ -140,6 +140,21 @@ const mapAdvanceToDb = (data: Partial<AdvanceData>) => ({
 const DEMO_COMPANY_ID = '00000000-0000-0000-0000-000000000001';
 
 // ============================================
+// Timeout Helper - prevents queries from hanging
+// ============================================
+const QUERY_TIMEOUT_MS = 8000;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function withTimeout(promise: Promise<any>, ms: number = QUERY_TIMEOUT_MS): Promise<any> {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Sorgu zaman aşımına uğradı')), ms)
+        ),
+    ]);
+}
+
+// ============================================
 // Methods Hook
 // ============================================
 export function useMethodsSupabase() {
@@ -156,10 +171,10 @@ export function useMethodsSupabase() {
         try {
             setLoading(true);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { data, error: fetchError } = await (supabase as any)
+            const { data, error: fetchError } = await withTimeout((supabase as any)
                 .from('methods')
                 .select('*')
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false }));
 
             if (fetchError) throw fetchError;
             setMethods((data || []).map(mapMethodFromDb));
@@ -252,10 +267,10 @@ export function usePaymentsSupabase() {
         try {
             setLoading(true);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { data, error: fetchError } = await (supabase as any)
+            const { data, error: fetchError } = await withTimeout((supabase as any)
                 .from('payments')
                 .select('*')
-                .order('date', { ascending: false });
+                .order('date', { ascending: false }));
 
             if (fetchError) throw fetchError;
             setPayments((data || []).map(mapPaymentFromDb));
@@ -348,10 +363,10 @@ export function usePersonnelSupabase() {
         try {
             setLoading(true);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { data, error: fetchError } = await (supabase as any)
+            const { data, error: fetchError } = await withTimeout((supabase as any)
                 .from('personnel')
                 .select('*')
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false }));
 
             if (fetchError) throw fetchError;
             setPersonnel((data || []).map(mapPersonnelFromDb));
@@ -444,10 +459,10 @@ export function useAdvancesSupabase() {
         try {
             setLoading(true);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { data, error: fetchError } = await (supabase as any)
+            const { data, error: fetchError } = await withTimeout((supabase as any)
                 .from('advances')
                 .select('*')
-                .order('date', { ascending: false });
+                .order('date', { ascending: false }));
 
             if (fetchError) throw fetchError;
             setAdvances((data || []).map(mapAdvanceFromDb));
@@ -583,7 +598,7 @@ export function useDataEntriesSupabase(methodId?: string) {
                 query = query.eq('method_id', methodId);
             }
 
-            const { data, error: fetchError } = await query;
+            const { data, error: fetchError } = await withTimeout(query);
 
             if (fetchError) throw fetchError;
             setDataEntries((data || []).map(mapDataEntryFromDb));
@@ -702,10 +717,10 @@ export function useCompaniesSupabase() {
         try {
             setLoading(true);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { data, error: fetchError } = await (supabase as any)
+            const { data, error: fetchError } = await withTimeout((supabase as any)
                 .from('companies')
                 .select('*')
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false }));
 
             if (fetchError) throw fetchError;
             setCompanies((data || []).map(mapCompanyFromDb));
