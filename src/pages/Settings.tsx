@@ -20,23 +20,19 @@ import {
     Lock,
     Eye,
     EyeOff,
+    Plus,
+    Pencil,
+    Trash2,
+    X,
 } from 'lucide-react';
 import { MainLayout } from '../components/layout';
 import { Card, Button } from '../components/ui';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { useCompaniesSupabase, type CompanyData } from '../hooks/useSupabase';
 
 // ============================================
 // Types
 // ============================================
-interface CompanySettings {
-    companyName: string;
-    authorizedEmail: string;
-    phone: string;
-    address: string;
-    taxId: string;
-    website: string;
-}
-
 interface SystemSettings {
     currency: string;
     dateFormat: string;
@@ -61,18 +57,18 @@ interface SecuritySettings {
     confirmPassword: string;
 }
 
+interface CompanyFormData {
+    name: string;
+    authorizedEmail: string;
+    phone: string;
+    address: string;
+    taxId: string;
+    website: string;
+}
+
 // ============================================
 // Default Values
 // ============================================
-const DEFAULT_COMPANY: CompanySettings = {
-    companyName: 'Filoyo',
-    authorizedEmail: '',
-    phone: '',
-    address: '',
-    taxId: '',
-    website: '',
-};
-
 const DEFAULT_SYSTEM: SystemSettings = {
     currency: 'TRY',
     dateFormat: 'DD.MM.YYYY',
@@ -89,6 +85,15 @@ const DEFAULT_NOTIFICATIONS: NotificationSettings = {
     monthlyReports: false,
     lowBalanceAlert: true,
     personnelChanges: true,
+};
+
+const EMPTY_COMPANY_FORM: CompanyFormData = {
+    name: '',
+    authorizedEmail: '',
+    phone: '',
+    address: '',
+    taxId: '',
+    website: '',
 };
 
 // ============================================
@@ -116,14 +121,12 @@ async function loadSettings(category: string): Promise<Record<string, unknown> |
         return data?.data || null;
     } catch (err) {
         console.error('Load settings error:', err);
-        // Fallback to localStorage if table doesn't exist yet
         const stored = localStorage.getItem(`filoyo_settings_${category}`);
         return stored ? JSON.parse(stored) : null;
     }
 }
 
 async function saveSettings(category: string, data: Record<string, unknown>): Promise<void> {
-    // Always save to localStorage as a backup
     localStorage.setItem(`filoyo_settings_${category}`, JSON.stringify(data));
 
     if (!isSupabaseConfigured()) return;
@@ -157,7 +160,6 @@ async function saveSettings(category: string, data: Record<string, unknown>): Pr
         }
     } catch (err) {
         console.error('Save settings error:', err);
-        // Already saved to localStorage above as fallback
     }
 }
 
@@ -214,17 +216,103 @@ function SectionHeader({ icon: Icon, title, description }: {
 }
 
 // ============================================
+// Company Card Component
+// ============================================
+function CompanyCard({ company, onEdit, onDelete }: {
+    company: CompanyData;
+    onEdit: () => void;
+    onDelete: () => void;
+}) {
+    return (
+        <div className="p-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] hover:border-[var(--color-accent-orange)]/40 transition-all group">
+            <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[var(--color-accent-orange)]/15 flex items-center justify-center">
+                        <Building2 className="w-5 h-5 text-[var(--color-accent-orange)]" />
+                    </div>
+                    <div>
+                        <h3 className="text-white font-semibold">{company.name}</h3>
+                        {company.authorizedEmail && (
+                            <p className="text-xs text-[var(--color-text-muted)] flex items-center gap-1 mt-0.5">
+                                <Mail className="w-3 h-3" /> {company.authorizedEmail}
+                            </p>
+                        )}
+                    </div>
+                </div>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                        onClick={onEdit}
+                        className="p-2 rounded-lg hover:bg-[var(--color-bg-card)] transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-accent-orange)]"
+                        title="Düzenle"
+                    >
+                        <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={onDelete}
+                        className="p-2 rounded-lg hover:bg-[var(--color-accent-red)]/10 transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-accent-red)]"
+                        title="Sil"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                {company.phone && (
+                    <div className="flex items-center gap-2 text-[var(--color-text-secondary)]">
+                        <Phone className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
+                        <span>{company.phone}</span>
+                    </div>
+                )}
+                {company.website && (
+                    <div className="flex items-center gap-2 text-[var(--color-text-secondary)]">
+                        <Globe className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
+                        <span>{company.website}</span>
+                    </div>
+                )}
+                {company.taxId && (
+                    <div className="flex items-center gap-2 text-[var(--color-text-secondary)]">
+                        <DollarSign className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
+                        <span>Vergi No: {company.taxId}</span>
+                    </div>
+                )}
+                {company.address && (
+                    <div className="flex items-center gap-2 text-[var(--color-text-secondary)] sm:col-span-2">
+                        <MapPin className="w-3.5 h-3.5 text-[var(--color-text-muted)] flex-shrink-0" />
+                        <span className="line-clamp-1">{company.address}</span>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ============================================
 // Main Settings Page
 // ============================================
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState<'company' | 'system' | 'notifications' | 'security'>('company');
-    const [loading, setLoading] = useState(true);
+    const [settingsLoading, setSettingsLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
 
-    // Form States
-    const [company, setCompany] = useState<CompanySettings>(DEFAULT_COMPANY);
+    // Company CRUD via Supabase hook
+    const {
+        companies,
+        loading: companiesLoading,
+        addCompany,
+        updateCompany,
+        deleteCompany,
+    } = useCompaniesSupabase();
+
+    // Company form state
+    const [showCompanyForm, setShowCompanyForm] = useState(false);
+    const [editingCompanyId, setEditingCompanyId] = useState<string | null>(null);
+    const [companyForm, setCompanyForm] = useState<CompanyFormData>(EMPTY_COMPANY_FORM);
+    const [companySubmitting, setCompanySubmitting] = useState(false);
+
+    // Other settings states
     const [system, setSystem] = useState<SystemSettings>(DEFAULT_SYSTEM);
     const [notifications, setNotifications] = useState<NotificationSettings>(DEFAULT_NOTIFICATIONS);
     const [security, setSecurity] = useState<SecuritySettings>({
@@ -233,36 +321,32 @@ export default function SettingsPage() {
         confirmPassword: '',
     });
 
-    // Load settings on mount
+    // Load non-company settings on mount
     useEffect(() => {
         async function load() {
-            setLoading(true);
+            setSettingsLoading(true);
             try {
-                const [companyData, systemData, notifData] = await Promise.all([
-                    loadSettings('company'),
+                const [systemData, notifData] = await Promise.all([
                     loadSettings('system'),
                     loadSettings('notifications'),
                 ]);
 
-                if (companyData) setCompany({ ...DEFAULT_COMPANY, ...companyData } as CompanySettings);
                 if (systemData) setSystem({ ...DEFAULT_SYSTEM, ...systemData } as SystemSettings);
                 if (notifData) setNotifications({ ...DEFAULT_NOTIFICATIONS, ...notifData } as NotificationSettings);
             } catch (err) {
                 console.error('Load error:', err);
             } finally {
-                setLoading(false);
+                setSettingsLoading(false);
             }
         }
         load();
     }, []);
 
-    // Save handler
+    // Save handler for non-company tabs
     const handleSave = useCallback(async () => {
         setSaving(true);
         try {
-            if (activeTab === 'company') {
-                await saveSettings('company', company as unknown as Record<string, unknown>);
-            } else if (activeTab === 'system') {
+            if (activeTab === 'system') {
                 await saveSettings('system', system as unknown as Record<string, unknown>);
             } else if (activeTab === 'notifications') {
                 await saveSettings('notifications', notifications as unknown as Record<string, unknown>);
@@ -277,7 +361,6 @@ export default function SettingsPage() {
                     setSaving(false);
                     return;
                 }
-                // Password change would be handled by Supabase Auth if configured
                 setSecurity({ currentPassword: '', newPassword: '', confirmPassword: '' });
             }
 
@@ -289,7 +372,80 @@ export default function SettingsPage() {
         } finally {
             setSaving(false);
         }
-    }, [activeTab, company, system, notifications, security]);
+    }, [activeTab, system, notifications, security]);
+
+    // Company form handlers
+    const openAddCompany = () => {
+        setEditingCompanyId(null);
+        setCompanyForm(EMPTY_COMPANY_FORM);
+        setShowCompanyForm(true);
+    };
+
+    const openEditCompany = (c: CompanyData) => {
+        setEditingCompanyId(c.id);
+        setCompanyForm({
+            name: c.name || '',
+            authorizedEmail: c.authorizedEmail || '',
+            phone: c.phone || '',
+            address: c.address || '',
+            taxId: c.taxId || '',
+            website: c.website || '',
+        });
+        setShowCompanyForm(true);
+    };
+
+    const cancelCompanyForm = () => {
+        setShowCompanyForm(false);
+        setEditingCompanyId(null);
+        setCompanyForm(EMPTY_COMPANY_FORM);
+    };
+
+    const handleCompanySubmit = async () => {
+        if (!companyForm.name.trim()) {
+            alert('Firma adı zorunludur!');
+            return;
+        }
+
+        setCompanySubmitting(true);
+        try {
+            if (editingCompanyId) {
+                await updateCompany(editingCompanyId, {
+                    name: companyForm.name,
+                    authorizedEmail: companyForm.authorizedEmail,
+                    phone: companyForm.phone,
+                    address: companyForm.address,
+                    taxId: companyForm.taxId,
+                    website: companyForm.website,
+                });
+            } else {
+                await addCompany({
+                    name: companyForm.name,
+                    authorizedEmail: companyForm.authorizedEmail,
+                    phone: companyForm.phone,
+                    address: companyForm.address,
+                    taxId: companyForm.taxId,
+                    website: companyForm.website,
+                    status: 'active',
+                });
+            }
+            cancelCompanyForm();
+        } catch (err) {
+            console.error('Company save error:', err);
+            alert('Kayıt başarısız: ' + (err instanceof Error ? err.message : 'Bilinmeyen hata'));
+        } finally {
+            setCompanySubmitting(false);
+        }
+    };
+
+    const handleDeleteCompany = async (id: string) => {
+        if (!confirm('Bu firmayı silmek istediğinize emin misiniz?')) return;
+        try {
+            await deleteCompany(id);
+        } catch (err) {
+            console.error('Delete error:', err);
+            alert('Silme işlemi başarısız oldu');
+        }
+    };
 
     const tabs = [
         { id: 'company' as const, label: 'Firma Bilgileri', icon: Building2 },
@@ -297,6 +453,8 @@ export default function SettingsPage() {
         { id: 'notifications' as const, label: 'Bildirimler', icon: Bell },
         { id: 'security' as const, label: 'Güvenlik', icon: Shield },
     ];
+
+    const isLoading = activeTab === 'company' ? companiesLoading : settingsLoading;
 
     return (
         <MainLayout breadcrumb={['Ayarlar']}>
@@ -308,16 +466,23 @@ export default function SettingsPage() {
                         Sistem ve firma ayarlarını yönetin
                     </p>
                 </div>
-                <Button onClick={handleSave} disabled={saving || activeTab === 'security'}>
-                    {saving ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : saved ? (
-                        <Check className="w-4 h-4 mr-2 text-[var(--color-accent-green)]" />
-                    ) : (
-                        <Save className="w-4 h-4 mr-2" />
-                    )}
-                    {saving ? 'Kaydediliyor...' : saved ? 'Kaydedildi!' : 'Kaydet'}
-                </Button>
+                {activeTab === 'company' ? (
+                    <Button onClick={openAddCompany}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Firma Ekle
+                    </Button>
+                ) : (
+                    <Button onClick={handleSave} disabled={saving || activeTab === 'security'}>
+                        {saving ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : saved ? (
+                            <Check className="w-4 h-4 mr-2 text-[var(--color-accent-green)]" />
+                        ) : (
+                            <Save className="w-4 h-4 mr-2" />
+                        )}
+                        {saving ? 'Kaydediliyor...' : saved ? 'Kaydedildi!' : 'Kaydet'}
+                    </Button>
+                )}
             </div>
 
             {/* Tabs */}
@@ -337,7 +502,7 @@ export default function SettingsPage() {
                 ))}
             </div>
 
-            {loading ? (
+            {isLoading ? (
                 <div className="flex items-center justify-center py-20">
                     <Loader2 className="w-8 h-8 text-[var(--color-accent-orange)] animate-spin" />
                 </div>
@@ -347,96 +512,154 @@ export default function SettingsPage() {
                     {/* COMPANY INFO TAB */}
                     {/* =============================== */}
                     {activeTab === 'company' && (
-                        <Card>
-                            <SectionHeader
-                                icon={Building2}
-                                title="Firma Bilgileri"
-                                description="Firmanızın genel bilgilerini güncelleyin"
-                            />
+                        <>
+                            {/* Add / Edit Form */}
+                            {showCompanyForm && (
+                                <Card>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <SectionHeader
+                                            icon={Building2}
+                                            title={editingCompanyId ? 'Firma Düzenle' : 'Yeni Firma Ekle'}
+                                            description={editingCompanyId ? 'Firma bilgilerini güncelleyin' : 'Yeni bir firma kaydı oluşturun'}
+                                        />
+                                        <button
+                                            onClick={cancelCompanyForm}
+                                            className="p-2 rounded-lg hover:bg-[var(--color-bg-secondary)] transition-colors text-[var(--color-text-muted)] hover:text-white"
+                                        >
+                                            <X className="w-5 h-5" />
+                                        </button>
+                                    </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                                        <UserCircle className="w-4 h-4 inline mr-2 -mt-0.5" />
-                                        Firma Adı
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={company.companyName}
-                                        onChange={(e) => setCompany({ ...company, companyName: e.target.value })}
-                                        className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
-                                        placeholder="Firma adınız"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                                        <Mail className="w-4 h-4 inline mr-2 -mt-0.5" />
-                                        Yetkili E-posta
-                                    </label>
-                                    <input
-                                        type="email"
-                                        value={company.authorizedEmail}
-                                        onChange={(e) => setCompany({ ...company, authorizedEmail: e.target.value })}
-                                        className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
-                                        placeholder="yetkili@firma.com"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                                        <Phone className="w-4 h-4 inline mr-2 -mt-0.5" />
-                                        Telefon
-                                    </label>
-                                    <input
-                                        type="tel"
-                                        value={company.phone}
-                                        onChange={(e) => setCompany({ ...company, phone: e.target.value })}
-                                        className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
-                                        placeholder="+90 555 123 4567"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                                        <Globe className="w-4 h-4 inline mr-2 -mt-0.5" />
-                                        Website
-                                    </label>
-                                    <input
-                                        type="url"
-                                        value={company.website}
-                                        onChange={(e) => setCompany({ ...company, website: e.target.value })}
-                                        className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
-                                        placeholder="https://firma.com"
-                                    />
-                                </div>
-                            </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                                <UserCircle className="w-4 h-4 inline mr-2 -mt-0.5" />
+                                                Firma Adı <span className="text-[var(--color-accent-red)]">*</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={companyForm.name}
+                                                onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
+                                                className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
+                                                placeholder="Firma adınız"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                                <Mail className="w-4 h-4 inline mr-2 -mt-0.5" />
+                                                Yetkili E-posta
+                                            </label>
+                                            <input
+                                                type="email"
+                                                value={companyForm.authorizedEmail}
+                                                onChange={(e) => setCompanyForm({ ...companyForm, authorizedEmail: e.target.value })}
+                                                className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
+                                                placeholder="yetkili@firma.com"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                                <Phone className="w-4 h-4 inline mr-2 -mt-0.5" />
+                                                Telefon
+                                            </label>
+                                            <input
+                                                type="tel"
+                                                value={companyForm.phone}
+                                                onChange={(e) => setCompanyForm({ ...companyForm, phone: e.target.value })}
+                                                className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
+                                                placeholder="+90 555 123 4567"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                                <Globe className="w-4 h-4 inline mr-2 -mt-0.5" />
+                                                Website
+                                            </label>
+                                            <input
+                                                type="url"
+                                                value={companyForm.website}
+                                                onChange={(e) => setCompanyForm({ ...companyForm, website: e.target.value })}
+                                                className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
+                                                placeholder="https://firma.com"
+                                            />
+                                        </div>
+                                    </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                                        <MapPin className="w-4 h-4 inline mr-2 -mt-0.5" />
-                                        Adres
-                                    </label>
-                                    <textarea
-                                        value={company.address}
-                                        onChange={(e) => setCompany({ ...company, address: e.target.value })}
-                                        className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors resize-none"
-                                        rows={3}
-                                        placeholder="Firma adresi"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                                        Vergi No / TCKN
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={company.taxId}
-                                        onChange={(e) => setCompany({ ...company, taxId: e.target.value })}
-                                        className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
-                                        placeholder="1234567890"
-                                    />
-                                </div>
-                            </div>
-                        </Card>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                                <MapPin className="w-4 h-4 inline mr-2 -mt-0.5" />
+                                                Adres
+                                            </label>
+                                            <textarea
+                                                value={companyForm.address}
+                                                onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })}
+                                                className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors resize-none"
+                                                rows={3}
+                                                placeholder="Firma adresi"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                                Vergi No / TCKN
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={companyForm.taxId}
+                                                onChange={(e) => setCompanyForm({ ...companyForm, taxId: e.target.value })}
+                                                className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
+                                                placeholder="1234567890"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Save / Cancel */}
+                                    <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-[var(--color-border-glass)]">
+                                        <Button variant="ghost" onClick={cancelCompanyForm}>
+                                            İptal
+                                        </Button>
+                                        <Button onClick={handleCompanySubmit} disabled={companySubmitting}>
+                                            {companySubmitting ? (
+                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            ) : (
+                                                <Save className="w-4 h-4 mr-2" />
+                                            )}
+                                            {editingCompanyId ? 'Güncelle' : 'Kaydet'}
+                                        </Button>
+                                    </div>
+                                </Card>
+                            )}
+
+                            {/* Saved Companies List */}
+                            <Card>
+                                <SectionHeader
+                                    icon={Building2}
+                                    title="Kayıtlı Firmalar"
+                                    description={`Toplam ${companies.length} firma kaydı bulunuyor`}
+                                />
+
+                                {companies.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <Building2 className="w-16 h-16 mx-auto text-[var(--color-text-muted)] mb-4 opacity-40" />
+                                        <p className="text-[var(--color-text-secondary)] mb-2">Henüz firma kaydı eklenmemiş</p>
+                                        <p className="text-sm text-[var(--color-text-muted)]">
+                                            Yukarıdaki "Firma Ekle" butonuna tıklayarak yeni firma ekleyebilirsiniz
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {companies.map((c) => (
+                                            <CompanyCard
+                                                key={c.id}
+                                                company={c}
+                                                onEdit={() => openEditCompany(c)}
+                                                onDelete={() => handleDeleteCompany(c.id)}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </Card>
+                        </>
                     )}
 
                     {/* =============================== */}

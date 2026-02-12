@@ -784,6 +784,10 @@ export interface CompanyData {
     name: string;
     logoUrl?: string;
     authorizedEmail: string;
+    phone?: string;
+    address?: string;
+    taxId?: string;
+    website?: string;
     status: 'active' | 'inactive' | 'pending';
     createdAt: string;
 }
@@ -792,7 +796,11 @@ const mapCompanyFromDb = (row: Record<string, unknown>): CompanyData => ({
     id: row.id as string,
     name: row.name as string,
     logoUrl: row.logo_url as string | undefined,
-    authorizedEmail: row.authorized_email as string,
+    authorizedEmail: (row.authorized_email as string) || '',
+    phone: row.phone as string | undefined,
+    address: row.address as string | undefined,
+    taxId: row.tax_id as string | undefined,
+    website: row.website as string | undefined,
     status: row.status as 'active' | 'inactive' | 'pending',
     createdAt: row.created_at as string,
 });
@@ -800,7 +808,11 @@ const mapCompanyFromDb = (row: Record<string, unknown>): CompanyData => ({
 const mapCompanyToDb = (data: Partial<CompanyData>) => ({
     ...(data.name && { name: data.name }),
     ...(data.logoUrl !== undefined && { logo_url: data.logoUrl || null }),
-    ...(data.authorizedEmail && { authorized_email: data.authorizedEmail }),
+    ...(data.authorizedEmail !== undefined && { authorized_email: data.authorizedEmail || '' }),
+    ...(data.phone !== undefined && { phone: data.phone || null }),
+    ...(data.address !== undefined && { address: data.address || null }),
+    ...(data.taxId !== undefined && { tax_id: data.taxId || null }),
+    ...(data.website !== undefined && { website: data.website || null }),
     ...(data.status && { status: data.status }),
 });
 
