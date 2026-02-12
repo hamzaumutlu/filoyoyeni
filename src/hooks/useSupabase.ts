@@ -251,6 +251,79 @@ export function useMethodsSupabase() {
 }
 
 // ============================================
+// Payment → Data Entry Sync Helper
+// When a payment is linked to a method, sync the
+// total payments for that method+date into data_entries
+// ============================================
+async function syncPaymentToDataEntry(methodId: string, date: string) {
+    if (!isSupabaseConfigured() || !methodId) return;
+
+    try {
+        // 1. Sum all payments for this method + date
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: allPayments, error: fetchErr } = await (supabase as any)
+            .from('payments')
+            .select('amount')
+            .eq('method_id', methodId)
+            .eq('date', date);
+
+        if (fetchErr) {
+            console.error('Sync fetch error:', fetchErr);
+            return;
+        }
+
+        const totalPayment = (allPayments || []).reduce(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (sum: number, p: any) => sum + (parseFloat(p.amount) || 0), 0
+        );
+
+        // 2. Find or create the data_entries row for this method + date
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: existing, error: lookupErr } = await (supabase as any)
+            .from('data_entries')
+            .select('id')
+            .eq('method_id', methodId)
+            .eq('date', date)
+            .maybeSingle();
+
+        if (lookupErr) {
+            console.error('Sync lookup error:', lookupErr);
+            return;
+        }
+
+        if (existing) {
+            // Update existing row's payment field
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any)
+                .from('data_entries')
+                .update({ payment: totalPayment, updated_at: new Date().toISOString() })
+                .eq('id', existing.id);
+        } else {
+            // Create new row if it doesn't exist yet
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any)
+                .from('data_entries')
+                .insert({
+                    method_id: methodId,
+                    company_id: DEMO_COMPANY_ID,
+                    date,
+                    supplement: 0,
+                    entry: 0,
+                    exit: 0,
+                    commission: 0,
+                    payment: totalPayment,
+                    delivery: 0,
+                    description: null,
+                    balance: 0,
+                    locked: false,
+                });
+        }
+    } catch (err) {
+        console.error('Sync payment to data entry error:', err);
+    }
+}
+
+// ============================================
 // Payments Hook
 // ============================================
 export function usePaymentsSupabase() {
@@ -307,6 +380,12 @@ export function usePaymentsSupabase() {
 
         if (error) throw error;
         await fetchPayments();
+
+        // Sync to data_entries if linked to a method
+        if (payment.methodId) {
+            await syncPaymentToDataEntry(payment.methodId, payment.date);
+        }
+
         return mapPaymentFromDb(data);
     };
 
@@ -315,6 +394,9 @@ export function usePaymentsSupabase() {
             setPayments((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
             return;
         }
+
+        // Get old payment data before update (to sync old method+date too)
+        const oldPayment = payments.find(p => p.id === id);
 
         const dbData = mapPaymentToDb(updates);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -325,6 +407,17 @@ export function usePaymentsSupabase() {
 
         if (error) throw error;
         await fetchPayments();
+
+        // Sync old method+date (to subtract removed payment)
+        if (oldPayment?.methodId && oldPayment?.date) {
+            await syncPaymentToDataEntry(oldPayment.methodId, oldPayment.date);
+        }
+        // Sync new method+date
+        const newMethodId = updates.methodId ?? oldPayment?.methodId;
+        const newDate = updates.date ?? oldPayment?.date;
+        if (newMethodId && newDate && (newMethodId !== oldPayment?.methodId || newDate !== oldPayment?.date)) {
+            await syncPaymentToDataEntry(newMethodId, newDate);
+        }
     };
 
     const deletePayment = async (id: string) => {
@@ -332,6 +425,9 @@ export function usePaymentsSupabase() {
             setPayments((prev) => prev.filter((p) => p.id !== id));
             return;
         }
+
+        // Get payment data before delete (to sync)
+        const deletedPayment = payments.find(p => p.id === id);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await (supabase as any)
@@ -341,6 +437,11 @@ export function usePaymentsSupabase() {
 
         if (error) throw error;
         await fetchPayments();
+
+        // Sync to data_entries after deletion
+        if (deletedPayment?.methodId && deletedPayment?.date) {
+            await syncPaymentToDataEntry(deletedPayment.methodId, deletedPayment.date);
+        }
     };
 
     return { payments, loading, error, addPayment, updatePayment, deletePayment, refetch: fetchPayments };
