@@ -226,6 +226,21 @@ td {
 }
 
 /* ============================================
+   Toast Animation
+   ============================================ */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ============================================
    Light theme - text color overrides
    Hardcoded white text → use primary var
    ============================================ */

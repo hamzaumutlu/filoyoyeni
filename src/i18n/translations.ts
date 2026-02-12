@@ -98,6 +98,9 @@ const tr: TranslationDictionary = {
     // Notifications
     'notifications.title': 'Bildirim Ayarları',
     'notifications.description': 'Hangi bildirimlerden haberdar olmak istediğinizi seçin',
+    'notifications.emailAddress': 'Bildirim E-posta Adresi',
+    'notifications.emailAddressPlaceholder': 'ornek@gmail.com',
+    'notifications.emailAddressDesc': 'Bildirimlerin gönderileceği e-posta adresini girin',
     'notifications.email': 'E-posta Bildirimleri',
     'notifications.emailDesc': 'Genel e-posta bildirimlerini etkinleştirin',
     'notifications.advance': 'Avans Uyarıları',
@@ -128,6 +131,8 @@ const tr: TranslationDictionary = {
     'security.browser': 'Tarayıcı',
     'security.passwordsMismatchAlert': 'Yeni şifreler eşleşmiyor!',
     'security.passwordMinLength': 'Şifre en az 6 karakter olmalıdır!',
+    'security.currentPasswordWrong': 'Mevcut şifre yanlış!',
+    'security.passwordChanged': 'Şifre başarıyla değiştirildi!',
 
     // Common
     'common.edit': 'Düzenle',
@@ -225,6 +230,9 @@ const en: TranslationDictionary = {
     // Notifications
     'notifications.title': 'Notification Settings',
     'notifications.description': 'Choose which notifications you want to receive',
+    'notifications.emailAddress': 'Notification Email Address',
+    'notifications.emailAddressPlaceholder': 'example@gmail.com',
+    'notifications.emailAddressDesc': 'Enter the email address where notifications will be sent',
     'notifications.email': 'Email Notifications',
     'notifications.emailDesc': 'Enable general email notifications',
     'notifications.advance': 'Advance Alerts',
@@ -255,6 +263,8 @@ const en: TranslationDictionary = {
     'security.browser': 'Browser',
     'security.passwordsMismatchAlert': 'New passwords do not match!',
     'security.passwordMinLength': 'Password must be at least 6 characters!',
+    'security.currentPasswordWrong': 'Current password is incorrect!',
+    'security.passwordChanged': 'Password changed successfully!',
 
     // Common
     'common.edit': 'Edit',

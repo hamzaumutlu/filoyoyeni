@@ -5,7 +5,7 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 // ============================================
 type Theme = 'dark' | 'light';
 
-interface SystemSettings {
+export interface SystemSettings {
     currency: string;
     dateFormat: string;
     timezone: string;
@@ -14,14 +14,27 @@ interface SystemSettings {
     darkMode: boolean;
 }
 
+export interface NotificationSettings {
+    notificationEmail: string;
+    emailNotifications: boolean;
+    advanceAlerts: boolean;
+    paymentReminders: boolean;
+    monthlyReports: boolean;
+    lowBalanceAlert: boolean;
+    personnelChanges: boolean;
+}
+
 interface ThemeContextType {
     theme: Theme;
     setTheme: (theme: Theme) => void;
     systemSettings: SystemSettings;
     updateSystemSettings: (updates: Partial<SystemSettings>) => void;
+    notificationSettings: NotificationSettings;
+    updateNotificationSettings: (updates: Partial<NotificationSettings>) => void;
 }
 
-const STORAGE_KEY = 'filoyo_system_settings';
+const SYSTEM_STORAGE_KEY = 'filoyo_system_settings';
+const NOTIF_STORAGE_KEY = 'filoyo_notification_settings';
 
 const DEFAULT_SYSTEM: SystemSettings = {
     currency: 'TRY',
@@ -29,7 +42,17 @@ const DEFAULT_SYSTEM: SystemSettings = {
     timezone: 'Europe/Istanbul',
     language: 'tr',
     autoBackup: true,
-    darkMode: false, // Default to light theme
+    darkMode: false,
+};
+
+const DEFAULT_NOTIFICATIONS: NotificationSettings = {
+    notificationEmail: '',
+    emailNotifications: true,
+    advanceAlerts: true,
+    paymentReminders: true,
+    monthlyReports: false,
+    lowBalanceAlert: true,
+    personnelChanges: true,
 };
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
@@ -38,16 +61,22 @@ const ThemeContext = createContext<ThemeContextType | null>(null);
 // Provider
 // ============================================
 export function ThemeProvider({ children }: { children: ReactNode }) {
+    // System Settings — auto-loaded from localStorage
     const [systemSettings, setSystemSettings] = useState<SystemSettings>(() => {
         try {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            if (stored) {
-                return { ...DEFAULT_SYSTEM, ...JSON.parse(stored) };
-            }
-        } catch {
-            // ignore
-        }
+            const stored = localStorage.getItem(SYSTEM_STORAGE_KEY);
+            if (stored) return { ...DEFAULT_SYSTEM, ...JSON.parse(stored) };
+        } catch { /* ignore */ }
         return DEFAULT_SYSTEM;
+    });
+
+    // Notification Settings — auto-loaded from localStorage
+    const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(() => {
+        try {
+            const stored = localStorage.getItem(NOTIF_STORAGE_KEY);
+            if (stored) return { ...DEFAULT_NOTIFICATIONS, ...JSON.parse(stored) };
+        } catch { /* ignore */ }
+        return DEFAULT_NOTIFICATIONS;
     });
 
     const theme: Theme = systemSettings.darkMode ? 'dark' : 'light';
@@ -57,24 +86,34 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         document.documentElement.setAttribute('data-theme', theme);
     }, [theme]);
 
-    // Persist settings on change
+    // Persist system settings on every change
     useEffect(() => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(systemSettings));
+        localStorage.setItem(SYSTEM_STORAGE_KEY, JSON.stringify(systemSettings));
     }, [systemSettings]);
+
+    // Persist notification settings on every change
+    useEffect(() => {
+        localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notificationSettings));
+    }, [notificationSettings]);
 
     const setTheme = (newTheme: Theme) => {
         setSystemSettings(prev => ({ ...prev, darkMode: newTheme === 'dark' }));
     };
 
     const updateSystemSettings = (updates: Partial<SystemSettings>) => {
-        setSystemSettings(prev => {
-            const next = { ...prev, ...updates };
-            return next;
-        });
+        setSystemSettings(prev => ({ ...prev, ...updates }));
+    };
+
+    const updateNotificationSettings = (updates: Partial<NotificationSettings>) => {
+        setNotificationSettings(prev => ({ ...prev, ...updates }));
     };
 
     return (
-        <ThemeContext.Provider value={{ theme, setTheme, systemSettings, updateSystemSettings }}>
+        <ThemeContext.Provider value={{
+            theme, setTheme,
+            systemSettings, updateSystemSettings,
+            notificationSettings, updateNotificationSettings,
+        }}>
             {children}
         </ThemeContext.Provider>
     );

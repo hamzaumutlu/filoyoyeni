@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { ToastProvider } from './components/ui/Toast';
 import ProtectedRoute from './components/ProtectedRoute';
 import { Loader2 } from 'lucide-react';
 import './index.css';
@@ -30,80 +31,82 @@ function App() {
   return (
     <BrowserRouter>
       <ThemeProvider>
-        <AuthProvider>
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              {/* Public Routes */}
-              <Route path="/login" element={<Login />} />
+        <ToastProvider>
+          <AuthProvider>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/login" element={<Login />} />
 
-              {/* Protected Routes */}
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/companies"
-                element={
-                  <ProtectedRoute>
-                    <Companies />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/personnel"
-                element={
-                  <ProtectedRoute>
-                    <Personnel />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/methods"
-                element={
-                  <ProtectedRoute>
-                    <Methods />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/data-entry"
-                element={
-                  <ProtectedRoute>
-                    <DataEntry />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/payments"
-                element={
-                  <ProtectedRoute>
-                    <Payments />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/users"
-                element={
-                  <ProtectedRoute requireAdmin>
-                    <Users />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/settings"
-                element={
-                  <ProtectedRoute>
-                    <Settings />
-                  </ProtectedRoute>
-                }
-              />
-            </Routes>
-          </Suspense>
-        </AuthProvider>
+                {/* Protected Routes */}
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute>
+                      <Dashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/companies"
+                  element={
+                    <ProtectedRoute>
+                      <Companies />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/personnel"
+                  element={
+                    <ProtectedRoute>
+                      <Personnel />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/methods"
+                  element={
+                    <ProtectedRoute>
+                      <Methods />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/data-entry"
+                  element={
+                    <ProtectedRoute>
+                      <DataEntry />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/payments"
+                  element={
+                    <ProtectedRoute>
+                      <Payments />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/users"
+                  element={
+                    <ProtectedRoute requireAdmin>
+                      <Users />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/settings"
+                  element={
+                    <ProtectedRoute>
+                      <Settings />
+                    </ProtectedRoute>
+                  }
+                />
+              </Routes>
+            </Suspense>
+          </AuthProvider>
+        </ToastProvider>
       </ThemeProvider>
     </BrowserRouter>
   );

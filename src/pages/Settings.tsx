@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
     Building2,
     Bell,
@@ -31,19 +31,11 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useCompaniesSupabase, type CompanyData } from '../hooks/useSupabase';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTranslation } from '../i18n';
+import { useToast } from '../components/ui/Toast';
 
 // ============================================
 // Types
 // ============================================
-
-interface NotificationSettings {
-    emailNotifications: boolean;
-    advanceAlerts: boolean;
-    paymentReminders: boolean;
-    monthlyReports: boolean;
-    lowBalanceAlert: boolean;
-    personnelChanges: boolean;
-}
 
 interface SecuritySettings {
     currentPassword: string;
@@ -60,19 +52,6 @@ interface CompanyFormData {
     website: string;
 }
 
-// ============================================
-// Default Values
-// ============================================
-
-const DEFAULT_NOTIFICATIONS: NotificationSettings = {
-    emailNotifications: true,
-    advanceAlerts: true,
-    paymentReminders: true,
-    monthlyReports: false,
-    lowBalanceAlert: true,
-    personnelChanges: true,
-};
-
 const EMPTY_COMPANY_FORM: CompanyFormData = {
     name: '',
     authorizedEmail: '',
@@ -81,73 +60,6 @@ const EMPTY_COMPANY_FORM: CompanyFormData = {
     taxId: '',
     website: '',
 };
-
-// ============================================
-// Storage keys & persistence helpers
-// ============================================
-const DEMO_COMPANY_ID = '00000000-0000-0000-0000-000000000001';
-const SETTINGS_TABLE = 'settings';
-
-async function loadSettings(category: string): Promise<Record<string, unknown> | null> {
-    if (!isSupabaseConfigured()) {
-        const stored = localStorage.getItem(`filoyo_settings_${category}`);
-        return stored ? JSON.parse(stored) : null;
-    }
-
-    try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error } = await (supabase as any)
-            .from(SETTINGS_TABLE)
-            .select('data')
-            .eq('company_id', DEMO_COMPANY_ID)
-            .eq('category', category)
-            .maybeSingle();
-
-        if (error) throw error;
-        return data?.data || null;
-    } catch (err) {
-        console.error('Load settings error:', err);
-        const stored = localStorage.getItem(`filoyo_settings_${category}`);
-        return stored ? JSON.parse(stored) : null;
-    }
-}
-
-async function saveSettings(category: string, data: Record<string, unknown>): Promise<void> {
-    localStorage.setItem(`filoyo_settings_${category}`, JSON.stringify(data));
-
-    if (!isSupabaseConfigured()) return;
-
-    try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: existing, error: lookupErr } = await (supabase as any)
-            .from(SETTINGS_TABLE)
-            .select('id')
-            .eq('company_id', DEMO_COMPANY_ID)
-            .eq('category', category)
-            .maybeSingle();
-
-        if (lookupErr) throw lookupErr;
-
-        if (existing) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await (supabase as any)
-                .from(SETTINGS_TABLE)
-                .update({ data, updated_at: new Date().toISOString() })
-                .eq('id', existing.id);
-        } else {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await (supabase as any)
-                .from(SETTINGS_TABLE)
-                .insert({
-                    company_id: DEMO_COMPANY_ID,
-                    category,
-                    data,
-                });
-        }
-    } catch (err) {
-        console.error('Save settings error:', err);
-    }
-}
 
 // ============================================
 // Toggle Component
@@ -279,12 +191,11 @@ function CompanyCard({ company, onEdit, onDelete, t }: {
 // ============================================
 export default function SettingsPage() {
     const { t } = useTranslation();
+    const { showToast } = useToast();
 
     const [activeTab, setActiveTab] = useState<'company' | 'system' | 'notifications' | 'security'>('company');
-    const [settingsLoading, setSettingsLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [saved, setSaved] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [changingPassword, setChangingPassword] = useState(false);
 
     // Company CRUD via Supabase hook
     const {
@@ -301,62 +212,66 @@ export default function SettingsPage() {
     const [companyForm, setCompanyForm] = useState<CompanyFormData>(EMPTY_COMPANY_FORM);
     const [companySubmitting, setCompanySubmitting] = useState(false);
 
-    // System settings via ThemeContext (auto-persisted)
-    const { systemSettings: system, updateSystemSettings } = useTheme();
+    // System & Notification settings via ThemeContext (auto-persisted)
+    const { systemSettings: system, updateSystemSettings, notificationSettings: notifications, updateNotificationSettings } = useTheme();
 
-    // Other settings states
-    const [notifications, setNotifications] = useState<NotificationSettings>(DEFAULT_NOTIFICATIONS);
+    // Security form state (not persisted — password fields)
     const [security, setSecurity] = useState<SecuritySettings>({
         currentPassword: '',
         newPassword: '',
         confirmPassword: '',
     });
 
-    // Load non-company settings on mount
-    useEffect(() => {
-        async function load() {
-            setSettingsLoading(true);
-            try {
-                const notifData = await loadSettings('notifications');
-                if (notifData) setNotifications({ ...DEFAULT_NOTIFICATIONS, ...notifData } as NotificationSettings);
-            } catch (err) {
-                console.error('Load error:', err);
-            } finally {
-                setSettingsLoading(false);
-            }
+    // Real password change via Supabase Auth
+    const handlePasswordChange = useCallback(async () => {
+        if (security.newPassword !== security.confirmPassword) {
+            showToast('error', t('security.passwordsMismatchAlert'));
+            return;
         }
-        load();
-    }, []);
+        if (security.newPassword.length < 6) {
+            showToast('error', t('security.passwordMinLength'));
+            return;
+        }
 
-    // Save handler for non-company tabs
-    const handleSave = useCallback(async () => {
-        setSaving(true);
+        setChangingPassword(true);
         try {
-            if (activeTab === 'notifications') {
-                await saveSettings('notifications', notifications as unknown as Record<string, unknown>);
-            } else if (activeTab === 'security') {
-                if (security.newPassword !== security.confirmPassword) {
-                    alert(t('security.passwordsMismatchAlert'));
-                    setSaving(false);
+            if (isSupabaseConfigured() && supabase) {
+                // Re-authenticate with current password first
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user?.email) throw new Error('No user session');
+
+                const { error: signInError } = await supabase.auth.signInWithPassword({
+                    email: user.email,
+                    password: security.currentPassword,
+                });
+
+                if (signInError) {
+                    showToast('error', t('security.currentPasswordWrong') || 'Mevcut şifre yanlış!');
+                    setChangingPassword(false);
                     return;
                 }
-                if (security.newPassword && security.newPassword.length < 6) {
-                    alert(t('security.passwordMinLength'));
-                    setSaving(false);
-                    return;
-                }
+
+                // Update password
+                const { error: updateError } = await supabase.auth.updateUser({
+                    password: security.newPassword,
+                });
+
+                if (updateError) throw updateError;
+
+                showToast('success', t('security.passwordChanged') || 'Şifre başarıyla değiştirildi!');
+                setSecurity({ currentPassword: '', newPassword: '', confirmPassword: '' });
+            } else {
+                // Demo mode
+                showToast('info', 'Demo modunda şifre değiştirme simüle edildi');
                 setSecurity({ currentPassword: '', newPassword: '', confirmPassword: '' });
             }
-
-            setSaved(true);
-            setTimeout(() => setSaved(false), 2500);
         } catch (err) {
-            console.error('Save error:', err);
-            alert(t('company.saveFailed') + ': ' + (err instanceof Error ? err.message : t('common.unknownError')));
+            console.error('Password change error:', err);
+            showToast('error', err instanceof Error ? err.message : t('common.unknownError'));
         } finally {
-            setSaving(false);
+            setChangingPassword(false);
         }
-    }, [activeTab, notifications, security, t]);
+    }, [security, t, showToast]);
 
     // Company form handlers
     const openAddCompany = () => {
@@ -438,7 +353,7 @@ export default function SettingsPage() {
         { id: 'security' as const, label: t('settings.tab.security'), icon: Shield },
     ];
 
-    const isLoading = activeTab === 'company' ? companiesLoading : settingsLoading;
+    const isLoading = activeTab === 'company' ? companiesLoading : false;
 
     return (
         <MainLayout breadcrumb={[t('nav.settings')]}>
@@ -455,23 +370,12 @@ export default function SettingsPage() {
                         <Plus className="w-4 h-4 mr-2" />
                         {t('company.add')}
                     </Button>
-                ) : activeTab === 'system' ? (
+                ) : (activeTab === 'system' || activeTab === 'notifications') ? (
                     <div className="flex items-center gap-2 text-sm text-[var(--color-accent-green)]">
                         <Check className="w-4 h-4" />
                         <span>{t('settings.autoSaving')}</span>
                     </div>
-                ) : (
-                    <Button onClick={handleSave} disabled={saving || activeTab === 'security'}>
-                        {saving ? (
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : saved ? (
-                            <Check className="w-4 h-4 mr-2 text-[var(--color-accent-green)]" />
-                        ) : (
-                            <Save className="w-4 h-4 mr-2" />
-                        )}
-                        {saving ? t('settings.saving') : saved ? t('settings.saved') : t('settings.save')}
-                    </Button>
-                )}
+                ) : null}
             </div>
 
             {/* Tabs */}
@@ -756,40 +660,56 @@ export default function SettingsPage() {
                                 description={t('notifications.description')}
                             />
 
+                            {/* Notification Email Address */}
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                    <Mail className="w-4 h-4 inline mr-2 -mt-0.5" />
+                                    {t('notifications.emailAddress')}
+                                </label>
+                                <input
+                                    type="email"
+                                    value={notifications.notificationEmail}
+                                    onChange={(e) => updateNotificationSettings({ notificationEmail: e.target.value })}
+                                    className="w-full max-w-md px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
+                                    placeholder={t('notifications.emailAddressPlaceholder')}
+                                />
+                                <p className="text-xs text-[var(--color-text-muted)] mt-1.5">{t('notifications.emailAddressDesc')}</p>
+                            </div>
+
                             <div className="space-y-1 divide-y divide-[var(--color-border-glass)]">
                                 <Toggle
                                     enabled={notifications.emailNotifications}
-                                    onChange={(val) => setNotifications({ ...notifications, emailNotifications: val })}
+                                    onChange={(val) => updateNotificationSettings({ emailNotifications: val })}
                                     label={t('notifications.email')}
                                     description={t('notifications.emailDesc')}
                                 />
                                 <Toggle
                                     enabled={notifications.advanceAlerts}
-                                    onChange={(val) => setNotifications({ ...notifications, advanceAlerts: val })}
+                                    onChange={(val) => updateNotificationSettings({ advanceAlerts: val })}
                                     label={t('notifications.advance')}
                                     description={t('notifications.advanceDesc')}
                                 />
                                 <Toggle
                                     enabled={notifications.paymentReminders}
-                                    onChange={(val) => setNotifications({ ...notifications, paymentReminders: val })}
+                                    onChange={(val) => updateNotificationSettings({ paymentReminders: val })}
                                     label={t('notifications.payment')}
                                     description={t('notifications.paymentDesc')}
                                 />
                                 <Toggle
                                     enabled={notifications.monthlyReports}
-                                    onChange={(val) => setNotifications({ ...notifications, monthlyReports: val })}
+                                    onChange={(val) => updateNotificationSettings({ monthlyReports: val })}
                                     label={t('notifications.monthly')}
                                     description={t('notifications.monthlyDesc')}
                                 />
                                 <Toggle
                                     enabled={notifications.lowBalanceAlert}
-                                    onChange={(val) => setNotifications({ ...notifications, lowBalanceAlert: val })}
+                                    onChange={(val) => updateNotificationSettings({ lowBalanceAlert: val })}
                                     label={t('notifications.lowBalance')}
                                     description={t('notifications.lowBalanceDesc')}
                                 />
                                 <Toggle
                                     enabled={notifications.personnelChanges}
-                                    onChange={(val) => setNotifications({ ...notifications, personnelChanges: val })}
+                                    onChange={(val) => updateNotificationSettings({ personnelChanges: val })}
                                     label={t('notifications.personnel')}
                                     description={t('notifications.personnelDesc')}
                                 />
@@ -861,10 +781,10 @@ export default function SettingsPage() {
 
                                 <div className="pt-4 border-t border-[var(--color-border-glass)]">
                                     <Button
-                                        onClick={handleSave}
-                                        disabled={saving || !security.currentPassword || !security.newPassword || security.newPassword !== security.confirmPassword}
+                                        onClick={handlePasswordChange}
+                                        disabled={changingPassword || !security.currentPassword || !security.newPassword || security.newPassword !== security.confirmPassword}
                                     >
-                                        {saving ? (
+                                        {changingPassword ? (
                                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                                         ) : (
                                             <Shield className="w-4 h-4 mr-2" />
