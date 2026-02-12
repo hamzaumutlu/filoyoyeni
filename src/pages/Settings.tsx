@@ -30,6 +30,7 @@ import { Card, Button } from '../components/ui';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useCompaniesSupabase, type CompanyData } from '../hooks/useSupabase';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from '../i18n';
 import { useToast } from '../components/ui/Toast';
 
@@ -192,6 +193,7 @@ function CompanyCard({ company, onEdit, onDelete, t }: {
 export default function SettingsPage() {
     const { t } = useTranslation();
     const { showToast } = useToast();
+    const { user: authUser } = useAuth();
 
     const [activeTab, setActiveTab] = useState<'company' | 'system' | 'notifications' | 'security'>('company');
     const [showPassword, setShowPassword] = useState(false);
@@ -235,18 +237,15 @@ export default function SettingsPage() {
 
         setChangingPassword(true);
         try {
-            if (isSupabaseConfigured() && supabase) {
-                // Re-authenticate with current password first
-                const { data: { user } } = await supabase.auth.getUser();
-                if (!user?.email) throw new Error('No user session');
-
+            if (isSupabaseConfigured() && supabase && authUser?.email) {
+                // Re-authenticate with current password
                 const { error: signInError } = await supabase.auth.signInWithPassword({
-                    email: user.email,
+                    email: authUser.email,
                     password: security.currentPassword,
                 });
 
                 if (signInError) {
-                    showToast('error', t('security.currentPasswordWrong') || 'Mevcut şifre yanlış!');
+                    showToast('error', t('security.currentPasswordWrong'));
                     setChangingPassword(false);
                     return;
                 }
@@ -258,7 +257,7 @@ export default function SettingsPage() {
 
                 if (updateError) throw updateError;
 
-                showToast('success', t('security.passwordChanged') || 'Şifre başarıyla değiştirildi!');
+                showToast('success', t('security.passwordChanged'));
                 setSecurity({ currentPassword: '', newPassword: '', confirmPassword: '' });
             } else {
                 // Demo mode
@@ -271,7 +270,7 @@ export default function SettingsPage() {
         } finally {
             setChangingPassword(false);
         }
-    }, [security, t, showToast]);
+    }, [security, t, showToast, authUser]);
 
     // Company form handlers
     const openAddCompany = () => {
