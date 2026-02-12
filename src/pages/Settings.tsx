@@ -29,18 +29,11 @@ import { MainLayout } from '../components/layout';
 import { Card, Button } from '../components/ui';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useCompaniesSupabase, type CompanyData } from '../hooks/useSupabase';
+import { useTheme } from '../contexts/ThemeContext';
 
 // ============================================
 // Types
 // ============================================
-interface SystemSettings {
-    currency: string;
-    dateFormat: string;
-    timezone: string;
-    language: string;
-    autoBackup: boolean;
-    darkMode: boolean;
-}
 
 interface NotificationSettings {
     emailNotifications: boolean;
@@ -69,14 +62,6 @@ interface CompanyFormData {
 // ============================================
 // Default Values
 // ============================================
-const DEFAULT_SYSTEM: SystemSettings = {
-    currency: 'TRY',
-    dateFormat: 'DD.MM.YYYY',
-    timezone: 'Europe/Istanbul',
-    language: 'tr',
-    autoBackup: true,
-    darkMode: true,
-};
 
 const DEFAULT_NOTIFICATIONS: NotificationSettings = {
     emailNotifications: true,
@@ -312,8 +297,10 @@ export default function SettingsPage() {
     const [companyForm, setCompanyForm] = useState<CompanyFormData>(EMPTY_COMPANY_FORM);
     const [companySubmitting, setCompanySubmitting] = useState(false);
 
+    // System settings via ThemeContext (auto-persisted)
+    const { systemSettings: system, updateSystemSettings } = useTheme();
+
     // Other settings states
-    const [system, setSystem] = useState<SystemSettings>(DEFAULT_SYSTEM);
     const [notifications, setNotifications] = useState<NotificationSettings>(DEFAULT_NOTIFICATIONS);
     const [security, setSecurity] = useState<SecuritySettings>({
         currentPassword: '',
@@ -326,12 +313,7 @@ export default function SettingsPage() {
         async function load() {
             setSettingsLoading(true);
             try {
-                const [systemData, notifData] = await Promise.all([
-                    loadSettings('system'),
-                    loadSettings('notifications'),
-                ]);
-
-                if (systemData) setSystem({ ...DEFAULT_SYSTEM, ...systemData } as SystemSettings);
+                const notifData = await loadSettings('notifications');
                 if (notifData) setNotifications({ ...DEFAULT_NOTIFICATIONS, ...notifData } as NotificationSettings);
             } catch (err) {
                 console.error('Load error:', err);
@@ -346,9 +328,7 @@ export default function SettingsPage() {
     const handleSave = useCallback(async () => {
         setSaving(true);
         try {
-            if (activeTab === 'system') {
-                await saveSettings('system', system as unknown as Record<string, unknown>);
-            } else if (activeTab === 'notifications') {
+            if (activeTab === 'notifications') {
                 await saveSettings('notifications', notifications as unknown as Record<string, unknown>);
             } else if (activeTab === 'security') {
                 if (security.newPassword !== security.confirmPassword) {
@@ -372,7 +352,7 @@ export default function SettingsPage() {
         } finally {
             setSaving(false);
         }
-    }, [activeTab, system, notifications, security]);
+    }, [activeTab, notifications, security]);
 
     // Company form handlers
     const openAddCompany = () => {
@@ -471,6 +451,11 @@ export default function SettingsPage() {
                         <Plus className="w-4 h-4 mr-2" />
                         Firma Ekle
                     </Button>
+                ) : activeTab === 'system' ? (
+                    <div className="flex items-center gap-2 text-sm text-[var(--color-accent-green)]">
+                        <Check className="w-4 h-4" />
+                        <span>Otomatik kaydediliyor</span>
+                    </div>
                 ) : (
                     <Button onClick={handleSave} disabled={saving || activeTab === 'security'}>
                         {saving ? (
@@ -681,7 +666,7 @@ export default function SettingsPage() {
                                     </label>
                                     <select
                                         value={system.currency}
-                                        onChange={(e) => setSystem({ ...system, currency: e.target.value })}
+                                        onChange={(e) => updateSystemSettings({ currency: e.target.value })}
                                         className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
                                     >
                                         <option value="TRY">₺ Türk Lirası (TRY)</option>
@@ -697,7 +682,7 @@ export default function SettingsPage() {
                                     </label>
                                     <select
                                         value={system.timezone}
-                                        onChange={(e) => setSystem({ ...system, timezone: e.target.value })}
+                                        onChange={(e) => updateSystemSettings({ timezone: e.target.value })}
                                         className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
                                     >
                                         <option value="Europe/Istanbul">İstanbul (UTC+3)</option>
@@ -713,7 +698,7 @@ export default function SettingsPage() {
                                     </label>
                                     <select
                                         value={system.dateFormat}
-                                        onChange={(e) => setSystem({ ...system, dateFormat: e.target.value })}
+                                        onChange={(e) => updateSystemSettings({ dateFormat: e.target.value })}
                                         className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
                                     >
                                         <option value="DD.MM.YYYY">DD.MM.YYYY (13.02.2026)</option>
@@ -729,7 +714,7 @@ export default function SettingsPage() {
                                     </label>
                                     <select
                                         value={system.language}
-                                        onChange={(e) => setSystem({ ...system, language: e.target.value })}
+                                        onChange={(e) => updateSystemSettings({ language: e.target.value })}
                                         className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
                                     >
                                         <option value="tr">🇹🇷 Türkçe</option>
@@ -741,13 +726,13 @@ export default function SettingsPage() {
                             <div className="border-t border-[var(--color-border-glass)] pt-4 space-y-1">
                                 <Toggle
                                     enabled={system.autoBackup}
-                                    onChange={(val) => setSystem({ ...system, autoBackup: val })}
+                                    onChange={(val) => updateSystemSettings({ autoBackup: val })}
                                     label="Otomatik Yedekleme"
                                     description="Verileriniz otomatik olarak yedeklensin"
                                 />
                                 <Toggle
                                     enabled={system.darkMode}
-                                    onChange={(val) => setSystem({ ...system, darkMode: val })}
+                                    onChange={(val) => updateSystemSettings({ darkMode: val })}
                                     label="Koyu Tema"
                                     description="Karanlık mod arayüzü kullanılsın"
                                 />
