@@ -14,6 +14,7 @@ const DataEntry = lazy(() => import('./pages/DataEntry'));
 const Payments = lazy(() => import('./pages/Payments'));
 const Login = lazy(() => import('./pages/Login'));
 const Users = lazy(() => import('./pages/Users'));
+const Settings = lazy(() => import('./pages/Settings'));
 
 // Lightweight loading fallback
 function PageLoader() {
@@ -94,7 +95,7 @@ function App() {
               path="/settings"
               element={
                 <ProtectedRoute>
-                  <PlaceholderPage title="Ayarlar" />
+                  <Settings />
                 </ProtectedRoute>
               }
             />
@@ -105,16 +106,6 @@ function App() {
   );
 }
 
-// Placeholder component for settings page
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="min-h-screen bg-[var(--color-bg-primary)] flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-white mb-2">{title}</h1>
-        <p className="text-[var(--color-text-secondary)]">Bu sayfa yakında eklenecek...</p>
-      </div>
-    </div>
-  );
-}
+
 
 export default App;
