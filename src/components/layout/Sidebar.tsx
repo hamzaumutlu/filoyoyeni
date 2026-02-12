@@ -16,27 +16,28 @@ import {
     UserCog,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTranslation } from '../../i18n';
 
 interface NavItem {
     icon: React.ElementType;
-    label: string;
+    labelKey: string;
     path: string;
     badge?: number;
     adminOnly?: boolean;
 }
 
 const mainNavItems: NavItem[] = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-    { icon: Building2, label: 'Firmalar', path: '/companies' },
-    { icon: Users, label: 'Personel', path: '/personnel' },
-    { icon: Settings2, label: 'Yöntemler', path: '/methods' },
-    { icon: FileSpreadsheet, label: 'Veri Girişi', path: '/data-entry' },
-    { icon: CreditCard, label: 'Ödemeler', path: '/payments' },
-    { icon: UserCog, label: 'Kullanıcılar', path: '/users', adminOnly: true },
+    { icon: LayoutDashboard, labelKey: 'nav.dashboard', path: '/' },
+    { icon: Building2, labelKey: 'nav.companies', path: '/companies' },
+    { icon: Users, labelKey: 'nav.personnel', path: '/personnel' },
+    { icon: Settings2, labelKey: 'nav.methods', path: '/methods' },
+    { icon: FileSpreadsheet, labelKey: 'nav.dataEntry', path: '/data-entry' },
+    { icon: CreditCard, labelKey: 'nav.payments', path: '/payments' },
+    { icon: UserCog, labelKey: 'nav.users', path: '/users', adminOnly: true },
 ];
 
 const bottomNavItems: NavItem[] = [
-    { icon: Settings, label: 'Ayarlar', path: '/settings' },
+    { icon: Settings, labelKey: 'nav.settings', path: '/settings' },
 ];
 
 interface SidebarProps {
@@ -48,6 +49,7 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const { user, logout, isAdmin } = useAuth();
     const navigate = useNavigate();
+    const { t } = useTranslation();
 
     const handleLogout = async () => {
         await logout();
@@ -85,7 +87,7 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]" />
                         <input
                             type="text"
-                            placeholder="Ara..."
+                            placeholder={t('header.search')}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[var(--color-bg-card)] text-white text-sm
@@ -120,7 +122,7 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                                 <item.icon className="w-5 h-5 flex-shrink-0" />
                                 {!isCollapsed && (
                                     <>
-                                        <span className="flex-1 text-sm font-medium">{item.label}</span>
+                                        <span className="flex-1 text-sm font-medium">{t(item.labelKey)}</span>
                                         {item.badge && (
                                             <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--color-accent-orange)] text-white">
                                                 {item.badge}
@@ -153,7 +155,7 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                             >
                                 <item.icon className="w-5 h-5 flex-shrink-0" />
                                 {!isCollapsed && (
-                                    <span className="text-sm font-medium">{item.label}</span>
+                                    <span className="text-sm font-medium">{t(item.labelKey)}</span>
                                 )}
                             </NavLink>
                         </li>
@@ -171,7 +173,7 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                         >
                             <LogOut className="w-5 h-5 flex-shrink-0" />
                             {!isCollapsed && (
-                                <span className="text-sm font-medium">Çıkış</span>
+                                <span className="text-sm font-medium">{t('nav.logout')}</span>
                             )}
                         </button>
                     </li>
@@ -188,7 +190,7 @@ export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                         <div className="flex-1 overflow-hidden">
                             <p className="text-sm font-medium text-white truncate">{user.email}</p>
                             <p className="text-xs text-[var(--color-text-muted)] capitalize">
-                                {user.role === 'super_admin' ? 'Süper Admin' : user.role === 'admin' ? 'Admin' : 'Kullanıcı'}
+                                {user.role === 'super_admin' ? t('auth.superAdmin') : user.role === 'admin' ? t('auth.admin') : t('auth.user')}
                             </p>
                         </div>
                     </div>

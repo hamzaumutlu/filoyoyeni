@@ -6,22 +6,25 @@ import {
     FileSpreadsheet,
     Settings,
 } from 'lucide-react';
+import { useTranslation } from '../../i18n';
 
 interface NavItem {
     icon: React.ElementType;
-    label: string;
+    labelKey: string;
     path: string;
 }
 
 const mobileNavItems: NavItem[] = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-    { icon: Building2, label: 'Firmalar', path: '/companies' },
-    { icon: Users, label: 'Personel', path: '/personnel' },
-    { icon: FileSpreadsheet, label: 'Veri Girişi', path: '/data-entry' },
-    { icon: Settings, label: 'Ayarlar', path: '/settings' },
+    { icon: LayoutDashboard, labelKey: 'nav.dashboard', path: '/' },
+    { icon: Building2, labelKey: 'nav.companies', path: '/companies' },
+    { icon: Users, labelKey: 'nav.personnel', path: '/personnel' },
+    { icon: FileSpreadsheet, labelKey: 'nav.dataEntry', path: '/data-entry' },
+    { icon: Settings, labelKey: 'nav.settings', path: '/settings' },
 ];
 
 export default function MobileBottomNav() {
+    const { t } = useTranslation();
+
     return (
         <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden">
             {/* Glassmorphism background */}
@@ -52,7 +55,7 @@ export default function MobileBottomNav() {
                                         <item.icon className={`w-5 h-5 ${isActive ? 'text-[var(--color-accent-orange)]' : ''}`} />
                                     </div>
                                     <span className={`text-[10px] font-medium ${isActive ? 'text-[var(--color-accent-orange)]' : ''}`}>
-                                        {item.label}
+                                        {t(item.labelKey)}
                                     </span>
                                 </>
                             )}

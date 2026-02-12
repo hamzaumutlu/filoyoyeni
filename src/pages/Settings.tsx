@@ -30,6 +30,7 @@ import { Card, Button } from '../components/ui';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useCompaniesSupabase, type CompanyData } from '../hooks/useSupabase';
 import { useTheme } from '../contexts/ThemeContext';
+import { useTranslation } from '../i18n';
 
 // ============================================
 // Types
@@ -203,10 +204,11 @@ function SectionHeader({ icon: Icon, title, description }: {
 // ============================================
 // Company Card Component
 // ============================================
-function CompanyCard({ company, onEdit, onDelete }: {
+function CompanyCard({ company, onEdit, onDelete, t }: {
     company: CompanyData;
     onEdit: () => void;
     onDelete: () => void;
+    t: (key: string, params?: Record<string, string | number>) => string;
 }) {
     return (
         <div className="p-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] hover:border-[var(--color-accent-orange)]/40 transition-all group">
@@ -228,14 +230,14 @@ function CompanyCard({ company, onEdit, onDelete }: {
                     <button
                         onClick={onEdit}
                         className="p-2 rounded-lg hover:bg-[var(--color-bg-card)] transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-accent-orange)]"
-                        title="Düzenle"
+                        title={t('common.edit')}
                     >
                         <Pencil className="w-4 h-4" />
                     </button>
                     <button
                         onClick={onDelete}
                         className="p-2 rounded-lg hover:bg-[var(--color-accent-red)]/10 transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-accent-red)]"
-                        title="Sil"
+                        title={t('common.delete')}
                     >
                         <Trash2 className="w-4 h-4" />
                     </button>
@@ -258,7 +260,7 @@ function CompanyCard({ company, onEdit, onDelete }: {
                 {company.taxId && (
                     <div className="flex items-center gap-2 text-[var(--color-text-secondary)]">
                         <DollarSign className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
-                        <span>Vergi No: {company.taxId}</span>
+                        <span>{t('company.taxIdLabel')}: {company.taxId}</span>
                     </div>
                 )}
                 {company.address && (
@@ -276,6 +278,8 @@ function CompanyCard({ company, onEdit, onDelete }: {
 // Main Settings Page
 // ============================================
 export default function SettingsPage() {
+    const { t } = useTranslation();
+
     const [activeTab, setActiveTab] = useState<'company' | 'system' | 'notifications' | 'security'>('company');
     const [settingsLoading, setSettingsLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -332,12 +336,12 @@ export default function SettingsPage() {
                 await saveSettings('notifications', notifications as unknown as Record<string, unknown>);
             } else if (activeTab === 'security') {
                 if (security.newPassword !== security.confirmPassword) {
-                    alert('Yeni şifreler eşleşmiyor!');
+                    alert(t('security.passwordsMismatchAlert'));
                     setSaving(false);
                     return;
                 }
                 if (security.newPassword && security.newPassword.length < 6) {
-                    alert('Şifre en az 6 karakter olmalıdır!');
+                    alert(t('security.passwordMinLength'));
                     setSaving(false);
                     return;
                 }
@@ -348,11 +352,11 @@ export default function SettingsPage() {
             setTimeout(() => setSaved(false), 2500);
         } catch (err) {
             console.error('Save error:', err);
-            alert('Kayıt başarısız: ' + (err instanceof Error ? err.message : 'Bilinmeyen hata'));
+            alert(t('company.saveFailed') + ': ' + (err instanceof Error ? err.message : t('common.unknownError')));
         } finally {
             setSaving(false);
         }
-    }, [activeTab, notifications, security]);
+    }, [activeTab, notifications, security, t]);
 
     // Company form handlers
     const openAddCompany = () => {
@@ -382,7 +386,7 @@ export default function SettingsPage() {
 
     const handleCompanySubmit = async () => {
         if (!companyForm.name.trim()) {
-            alert('Firma adı zorunludur!');
+            alert(t('company.nameRequired'));
             return;
         }
 
@@ -411,50 +415,50 @@ export default function SettingsPage() {
             cancelCompanyForm();
         } catch (err) {
             console.error('Company save error:', err);
-            alert('Kayıt başarısız: ' + (err instanceof Error ? err.message : 'Bilinmeyen hata'));
+            alert(t('company.saveFailed') + ': ' + (err instanceof Error ? err.message : t('common.unknownError')));
         } finally {
             setCompanySubmitting(false);
         }
     };
 
     const handleDeleteCompany = async (id: string) => {
-        if (!confirm('Bu firmayı silmek istediğinize emin misiniz?')) return;
+        if (!confirm(t('company.deleteConfirm'))) return;
         try {
             await deleteCompany(id);
         } catch (err) {
             console.error('Delete error:', err);
-            alert('Silme işlemi başarısız oldu');
+            alert(t('company.deleteFailed'));
         }
     };
 
     const tabs = [
-        { id: 'company' as const, label: 'Firma Bilgileri', icon: Building2 },
-        { id: 'system' as const, label: 'Sistem Ayarları', icon: Globe },
-        { id: 'notifications' as const, label: 'Bildirimler', icon: Bell },
-        { id: 'security' as const, label: 'Güvenlik', icon: Shield },
+        { id: 'company' as const, label: t('settings.tab.company'), icon: Building2 },
+        { id: 'system' as const, label: t('settings.tab.system'), icon: Globe },
+        { id: 'notifications' as const, label: t('settings.tab.notifications'), icon: Bell },
+        { id: 'security' as const, label: t('settings.tab.security'), icon: Shield },
     ];
 
     const isLoading = activeTab === 'company' ? companiesLoading : settingsLoading;
 
     return (
-        <MainLayout breadcrumb={['Ayarlar']}>
+        <MainLayout breadcrumb={[t('nav.settings')]}>
             {/* Page Header */}
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">Ayarlar</h1>
+                    <h1 className="text-2xl font-bold text-white">{t('settings.title')}</h1>
                     <p className="text-[var(--color-text-secondary)] mt-1">
-                        Sistem ve firma ayarlarını yönetin
+                        {t('settings.subtitle')}
                     </p>
                 </div>
                 {activeTab === 'company' ? (
                     <Button onClick={openAddCompany}>
                         <Plus className="w-4 h-4 mr-2" />
-                        Firma Ekle
+                        {t('company.add')}
                     </Button>
                 ) : activeTab === 'system' ? (
                     <div className="flex items-center gap-2 text-sm text-[var(--color-accent-green)]">
                         <Check className="w-4 h-4" />
-                        <span>Otomatik kaydediliyor</span>
+                        <span>{t('settings.autoSaving')}</span>
                     </div>
                 ) : (
                     <Button onClick={handleSave} disabled={saving || activeTab === 'security'}>
@@ -465,7 +469,7 @@ export default function SettingsPage() {
                         ) : (
                             <Save className="w-4 h-4 mr-2" />
                         )}
-                        {saving ? 'Kaydediliyor...' : saved ? 'Kaydedildi!' : 'Kaydet'}
+                        {saving ? t('settings.saving') : saved ? t('settings.saved') : t('settings.save')}
                     </Button>
                 )}
             </div>
@@ -504,8 +508,8 @@ export default function SettingsPage() {
                                     <div className="flex items-center justify-between mb-4">
                                         <SectionHeader
                                             icon={Building2}
-                                            title={editingCompanyId ? 'Firma Düzenle' : 'Yeni Firma Ekle'}
-                                            description={editingCompanyId ? 'Firma bilgilerini güncelleyin' : 'Yeni bir firma kaydı oluşturun'}
+                                            title={editingCompanyId ? t('company.edit') : t('company.addNew')}
+                                            description={editingCompanyId ? t('company.editDescription') : t('company.addDescription')}
                                         />
                                         <button
                                             onClick={cancelCompanyForm}
@@ -519,53 +523,53 @@ export default function SettingsPage() {
                                         <div>
                                             <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                                                 <UserCircle className="w-4 h-4 inline mr-2 -mt-0.5" />
-                                                Firma Adı <span className="text-[var(--color-accent-red)]">*</span>
+                                                {t('company.name')} <span className="text-[var(--color-accent-red)]">*</span>
                                             </label>
                                             <input
                                                 type="text"
                                                 value={companyForm.name}
                                                 onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
                                                 className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
-                                                placeholder="Firma adınız"
+                                                placeholder={t('company.namePlaceholder')}
                                             />
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                                                 <Mail className="w-4 h-4 inline mr-2 -mt-0.5" />
-                                                Yetkili E-posta
+                                                {t('company.email')}
                                             </label>
                                             <input
                                                 type="email"
                                                 value={companyForm.authorizedEmail}
                                                 onChange={(e) => setCompanyForm({ ...companyForm, authorizedEmail: e.target.value })}
                                                 className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
-                                                placeholder="yetkili@firma.com"
+                                                placeholder={t('company.emailPlaceholder')}
                                             />
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                                                 <Phone className="w-4 h-4 inline mr-2 -mt-0.5" />
-                                                Telefon
+                                                {t('company.phone')}
                                             </label>
                                             <input
                                                 type="tel"
                                                 value={companyForm.phone}
                                                 onChange={(e) => setCompanyForm({ ...companyForm, phone: e.target.value })}
                                                 className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
-                                                placeholder="+90 555 123 4567"
+                                                placeholder={t('company.phonePlaceholder')}
                                             />
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                                                 <Globe className="w-4 h-4 inline mr-2 -mt-0.5" />
-                                                Website
+                                                {t('company.website')}
                                             </label>
                                             <input
                                                 type="url"
                                                 value={companyForm.website}
                                                 onChange={(e) => setCompanyForm({ ...companyForm, website: e.target.value })}
                                                 className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
-                                                placeholder="https://firma.com"
+                                                placeholder={t('company.websitePlaceholder')}
                                             />
                                         </div>
                                     </div>
@@ -574,26 +578,26 @@ export default function SettingsPage() {
                                         <div>
                                             <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                                                 <MapPin className="w-4 h-4 inline mr-2 -mt-0.5" />
-                                                Adres
+                                                {t('company.address')}
                                             </label>
                                             <textarea
                                                 value={companyForm.address}
                                                 onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })}
                                                 className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors resize-none"
                                                 rows={3}
-                                                placeholder="Firma adresi"
+                                                placeholder={t('company.addressPlaceholder')}
                                             />
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                                                Vergi No / TCKN
+                                                {t('company.taxId')}
                                             </label>
                                             <input
                                                 type="text"
                                                 value={companyForm.taxId}
                                                 onChange={(e) => setCompanyForm({ ...companyForm, taxId: e.target.value })}
                                                 className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
-                                                placeholder="1234567890"
+                                                placeholder={t('company.taxIdPlaceholder')}
                                             />
                                         </div>
                                     </div>
@@ -601,7 +605,7 @@ export default function SettingsPage() {
                                     {/* Save / Cancel */}
                                     <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-[var(--color-border-glass)]">
                                         <Button variant="ghost" onClick={cancelCompanyForm}>
-                                            İptal
+                                            {t('settings.cancel')}
                                         </Button>
                                         <Button onClick={handleCompanySubmit} disabled={companySubmitting}>
                                             {companySubmitting ? (
@@ -609,7 +613,7 @@ export default function SettingsPage() {
                                             ) : (
                                                 <Save className="w-4 h-4 mr-2" />
                                             )}
-                                            {editingCompanyId ? 'Güncelle' : 'Kaydet'}
+                                            {editingCompanyId ? t('settings.update') : t('settings.save')}
                                         </Button>
                                     </div>
                                 </Card>
@@ -619,16 +623,16 @@ export default function SettingsPage() {
                             <Card>
                                 <SectionHeader
                                     icon={Building2}
-                                    title="Kayıtlı Firmalar"
-                                    description={`Toplam ${companies.length} firma kaydı bulunuyor`}
+                                    title={t('company.savedCompanies')}
+                                    description={t('company.totalRecords', { count: companies.length })}
                                 />
 
                                 {companies.length === 0 ? (
                                     <div className="text-center py-12">
                                         <Building2 className="w-16 h-16 mx-auto text-[var(--color-text-muted)] mb-4 opacity-40" />
-                                        <p className="text-[var(--color-text-secondary)] mb-2">Henüz firma kaydı eklenmemiş</p>
+                                        <p className="text-[var(--color-text-secondary)] mb-2">{t('company.noRecords')}</p>
                                         <p className="text-sm text-[var(--color-text-muted)]">
-                                            Yukarıdaki "Firma Ekle" butonuna tıklayarak yeni firma ekleyebilirsiniz
+                                            {t('company.noRecordsHint')}
                                         </p>
                                     </div>
                                 ) : (
@@ -639,6 +643,7 @@ export default function SettingsPage() {
                                                 company={c}
                                                 onEdit={() => openEditCompany(c)}
                                                 onDelete={() => handleDeleteCompany(c.id)}
+                                                t={t}
                                             />
                                         ))}
                                     </div>
@@ -654,47 +659,47 @@ export default function SettingsPage() {
                         <Card>
                             <SectionHeader
                                 icon={Globe}
-                                title="Sistem Ayarları"
-                                description="Genel sistem tercihlerini yapılandırın"
+                                title={t('system.title')}
+                                description={t('system.description')}
                             />
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                                 <div>
                                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                                         <DollarSign className="w-4 h-4 inline mr-2 -mt-0.5" />
-                                        Para Birimi
+                                        {t('system.currency')}
                                     </label>
                                     <select
                                         value={system.currency}
                                         onChange={(e) => updateSystemSettings({ currency: e.target.value })}
                                         className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
                                     >
-                                        <option value="TRY">₺ Türk Lirası (TRY)</option>
-                                        <option value="USD">$ Amerikan Doları (USD)</option>
-                                        <option value="EUR">€ Euro (EUR)</option>
-                                        <option value="GBP">£ İngiliz Sterlini (GBP)</option>
+                                        <option value="TRY">{t('system.currency.try')}</option>
+                                        <option value="USD">{t('system.currency.usd')}</option>
+                                        <option value="EUR">{t('system.currency.eur')}</option>
+                                        <option value="GBP">{t('system.currency.gbp')}</option>
                                     </select>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                                         <Clock className="w-4 h-4 inline mr-2 -mt-0.5" />
-                                        Saat Dilimi
+                                        {t('system.timezone')}
                                     </label>
                                     <select
                                         value={system.timezone}
                                         onChange={(e) => updateSystemSettings({ timezone: e.target.value })}
                                         className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
                                     >
-                                        <option value="Europe/Istanbul">İstanbul (UTC+3)</option>
-                                        <option value="Europe/London">Londra (UTC+0)</option>
-                                        <option value="America/New_York">New York (UTC-5)</option>
-                                        <option value="Asia/Dubai">Dubai (UTC+4)</option>
+                                        <option value="Europe/Istanbul">{t('system.timezone.istanbul')}</option>
+                                        <option value="Europe/London">{t('system.timezone.london')}</option>
+                                        <option value="America/New_York">{t('system.timezone.newyork')}</option>
+                                        <option value="Asia/Dubai">{t('system.timezone.dubai')}</option>
                                     </select>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                                         <Calendar className="w-4 h-4 inline mr-2 -mt-0.5" />
-                                        Tarih Formatı
+                                        {t('system.dateFormat')}
                                     </label>
                                     <select
                                         value={system.dateFormat}
@@ -710,7 +715,7 @@ export default function SettingsPage() {
                                 <div>
                                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                                         <Palette className="w-4 h-4 inline mr-2 -mt-0.5" />
-                                        Dil
+                                        {t('system.language')}
                                     </label>
                                     <select
                                         value={system.language}
@@ -727,14 +732,14 @@ export default function SettingsPage() {
                                 <Toggle
                                     enabled={system.autoBackup}
                                     onChange={(val) => updateSystemSettings({ autoBackup: val })}
-                                    label="Otomatik Yedekleme"
-                                    description="Verileriniz otomatik olarak yedeklensin"
+                                    label={t('system.autoBackup')}
+                                    description={t('system.autoBackupDesc')}
                                 />
                                 <Toggle
                                     enabled={system.darkMode}
                                     onChange={(val) => updateSystemSettings({ darkMode: val })}
-                                    label="Koyu Tema"
-                                    description="Karanlık mod arayüzü kullanılsın"
+                                    label={t('system.darkMode')}
+                                    description={t('system.darkModeDesc')}
                                 />
                             </div>
                         </Card>
@@ -747,46 +752,46 @@ export default function SettingsPage() {
                         <Card>
                             <SectionHeader
                                 icon={Bell}
-                                title="Bildirim Ayarları"
-                                description="Hangi bildirimlerden haberdar olmak istediğinizi seçin"
+                                title={t('notifications.title')}
+                                description={t('notifications.description')}
                             />
 
                             <div className="space-y-1 divide-y divide-[var(--color-border-glass)]">
                                 <Toggle
                                     enabled={notifications.emailNotifications}
                                     onChange={(val) => setNotifications({ ...notifications, emailNotifications: val })}
-                                    label="E-posta Bildirimleri"
-                                    description="Genel e-posta bildirimlerini etkinleştirin"
+                                    label={t('notifications.email')}
+                                    description={t('notifications.emailDesc')}
                                 />
                                 <Toggle
                                     enabled={notifications.advanceAlerts}
                                     onChange={(val) => setNotifications({ ...notifications, advanceAlerts: val })}
-                                    label="Avans Uyarıları"
-                                    description="Personel avans talep ettiğinde bildirim alın"
+                                    label={t('notifications.advance')}
+                                    description={t('notifications.advanceDesc')}
                                 />
                                 <Toggle
                                     enabled={notifications.paymentReminders}
                                     onChange={(val) => setNotifications({ ...notifications, paymentReminders: val })}
-                                    label="Ödeme Hatırlatıcıları"
-                                    description="Yaklaşan veya geciken ödemeler için hatırlatma"
+                                    label={t('notifications.payment')}
+                                    description={t('notifications.paymentDesc')}
                                 />
                                 <Toggle
                                     enabled={notifications.monthlyReports}
                                     onChange={(val) => setNotifications({ ...notifications, monthlyReports: val })}
-                                    label="Aylık Raporlar"
-                                    description="Her ay özet raporu e-posta ile gönderilsin"
+                                    label={t('notifications.monthly')}
+                                    description={t('notifications.monthlyDesc')}
                                 />
                                 <Toggle
                                     enabled={notifications.lowBalanceAlert}
                                     onChange={(val) => setNotifications({ ...notifications, lowBalanceAlert: val })}
-                                    label="Düşük Bakiye Uyarısı"
-                                    description="Kasa bakiyesi düşükken uyarı alın"
+                                    label={t('notifications.lowBalance')}
+                                    description={t('notifications.lowBalanceDesc')}
                                 />
                                 <Toggle
                                     enabled={notifications.personnelChanges}
                                     onChange={(val) => setNotifications({ ...notifications, personnelChanges: val })}
-                                    label="Personel Değişiklikleri"
-                                    description="Personel ekleme/çıkarma işlemlerinde bildirim"
+                                    label={t('notifications.personnel')}
+                                    description={t('notifications.personnelDesc')}
                                 />
                             </div>
                         </Card>
@@ -799,15 +804,15 @@ export default function SettingsPage() {
                         <Card>
                             <SectionHeader
                                 icon={Shield}
-                                title="Güvenlik"
-                                description="Şifrenizi değiştirin ve hesabınızı koruyun"
+                                title={t('security.title')}
+                                description={t('security.description')}
                             />
 
                             <div className="max-w-md space-y-4">
                                 <div>
                                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                                         <Lock className="w-4 h-4 inline mr-2 -mt-0.5" />
-                                        Mevcut Şifre
+                                        {t('security.currentPassword')}
                                     </label>
                                     <div className="relative">
                                         <input
@@ -815,7 +820,7 @@ export default function SettingsPage() {
                                             value={security.currentPassword}
                                             onChange={(e) => setSecurity({ ...security, currentPassword: e.target.value })}
                                             className="w-full px-4 py-3 pr-12 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
-                                            placeholder="Mevcut şifreniz"
+                                            placeholder={t('security.currentPasswordPlaceholder')}
                                         />
                                         <button
                                             type="button"
@@ -828,29 +833,29 @@ export default function SettingsPage() {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                                        Yeni Şifre
+                                        {t('security.newPassword')}
                                     </label>
                                     <input
                                         type="password"
                                         value={security.newPassword}
                                         onChange={(e) => setSecurity({ ...security, newPassword: e.target.value })}
                                         className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
-                                        placeholder="En az 6 karakter"
+                                        placeholder={t('security.newPasswordPlaceholder')}
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                                        Yeni Şifre (Tekrar)
+                                        {t('security.confirmPassword')}
                                     </label>
                                     <input
                                         type="password"
                                         value={security.confirmPassword}
                                         onChange={(e) => setSecurity({ ...security, confirmPassword: e.target.value })}
                                         className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)] text-white text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent-orange)] focus:outline-none transition-colors"
-                                        placeholder="Yeni şifreyi tekrar girin"
+                                        placeholder={t('security.confirmPasswordPlaceholder')}
                                     />
                                     {security.newPassword && security.confirmPassword && security.newPassword !== security.confirmPassword && (
-                                        <p className="text-xs text-[var(--color-accent-red)] mt-1">Şifreler eşleşmiyor</p>
+                                        <p className="text-xs text-[var(--color-accent-red)] mt-1">{t('security.passwordMismatch')}</p>
                                     )}
                                 </div>
 
@@ -864,26 +869,26 @@ export default function SettingsPage() {
                                         ) : (
                                             <Shield className="w-4 h-4 mr-2" />
                                         )}
-                                        Şifreyi Değiştir
+                                        {t('security.changePassword')}
                                     </Button>
                                 </div>
                             </div>
 
                             {/* Session Info */}
                             <div className="mt-8 p-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-glass)]">
-                                <h3 className="text-white font-medium mb-3">Oturum Bilgisi</h3>
+                                <h3 className="text-white font-medium mb-3">{t('security.sessionInfo')}</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                                     <div>
-                                        <span className="text-[var(--color-text-muted)]">Son Giriş</span>
-                                        <p className="text-white mt-1">{new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                                        <span className="text-[var(--color-text-muted)]">{t('security.lastLogin')}</span>
+                                        <p className="text-white mt-1">{new Date().toLocaleDateString(system.language === 'en' ? 'en-US' : 'tr-TR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                                     </div>
                                     <div>
-                                        <span className="text-[var(--color-text-muted)]">IP Adresi</span>
+                                        <span className="text-[var(--color-text-muted)]">{t('security.ipAddress')}</span>
                                         <p className="text-white mt-1">••••••••</p>
                                     </div>
                                     <div>
-                                        <span className="text-[var(--color-text-muted)]">Tarayıcı</span>
-                                        <p className="text-white mt-1">{navigator.userAgent.includes('Chrome') ? 'Chrome' : navigator.userAgent.includes('Firefox') ? 'Firefox' : 'Tarayıcı'}</p>
+                                        <span className="text-[var(--color-text-muted)]">{t('security.browser')}</span>
+                                        <p className="text-white mt-1">{navigator.userAgent.includes('Chrome') ? 'Chrome' : navigator.userAgent.includes('Firefox') ? 'Firefox' : 'Browser'}</p>
                                     </div>
                                 </div>
                             </div>

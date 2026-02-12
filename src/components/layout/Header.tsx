@@ -1,10 +1,12 @@
 import { Bell, ChevronRight, Search, User, Zap } from 'lucide-react';
+import { useTranslation } from '../../i18n';
 
 interface HeaderProps {
     breadcrumb?: string[];
 }
 
 export default function Header({ breadcrumb = ['Dashboard'] }: HeaderProps) {
+    const { t } = useTranslation();
     return (
         <header className="h-14 md:h-16 bg-[var(--color-bg-secondary)] border-b border-[var(--color-border-glass)] flex items-center justify-between px-4 md:px-6">
             {/* Left: Logo (mobile) or Breadcrumb (desktop) */}
@@ -38,7 +40,7 @@ export default function Header({ breadcrumb = ['Dashboard'] }: HeaderProps) {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]" />
                     <input
                         type="text"
-                        placeholder="Ara..."
+                        placeholder={t('header.search')}
                         className="w-64 pl-10 pr-4 py-2 rounded-xl bg-[var(--color-bg-card)] text-white text-sm
               border border-[var(--color-border-glass)] focus:border-[var(--color-accent-orange)]
               transition-colors placeholder:text-[var(--color-text-muted)]"
@@ -68,7 +70,7 @@ export default function Header({ breadcrumb = ['Dashboard'] }: HeaderProps) {
                     <div className="w-7 h-7 md:w-8 md:h-8 rounded-full gradient-orange flex items-center justify-center">
                         <User className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" />
                     </div>
-                    <span className="text-sm font-medium text-white hidden sm:block">Admin</span>
+                    <span className="text-sm font-medium text-white hidden sm:block">{t('header.admin')}</span>
                 </button>
             </div>
         </header>
