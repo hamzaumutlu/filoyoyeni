@@ -13,7 +13,21 @@ export const isSupabaseConfigured = (): boolean => {
 let supabaseClient: SupabaseClient<Database> | null = null;
 
 if (isSupabaseConfigured()) {
-    supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey);
+    supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+        auth: {
+            autoRefreshToken: true,
+            persistSession: true,
+            detectSessionInUrl: true,
+        },
+        global: {
+            fetch: (url, options = {}) => {
+                return fetch(url, {
+                    ...options,
+                    signal: options.signal || AbortSignal.timeout(10000),
+                });
+            },
+        },
+    });
 } else {
     console.warn('Supabase credentials not found. Running in demo mode.');
 }

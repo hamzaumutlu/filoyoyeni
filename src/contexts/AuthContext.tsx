@@ -44,72 +44,127 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Check for existing session on mount
-    useEffect(() => {
-        checkSession();
-    }, []);
-
-    const checkSession = async () => {
-        if (!isSupabaseConfigured()) {
-            // Demo mode - check localStorage
-            const savedUser = localStorage.getItem('filoyo_user');
-            if (savedUser) {
-                setUser(JSON.parse(savedUser));
-            }
-            setLoading(false);
-            return;
-        }
-
+    // Helper: fetch user details from users table
+    const fetchUserDetails = async (authUser: { id: string; email?: string }) => {
         try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { data: { session } } = await (supabase as any).auth.getSession();
+            const { data: userData, error: userError } = await (supabase as any)
+                .from('users')
+                .select('*, companies(name)')
+                .eq('id', authUser.id)
+                .single();
 
-            if (session?.user) {
-                // Fetch user details from our users table
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const { data: userData, error: userError } = await (supabase as any)
-                    .from('users')
-                    .select('*, companies(name)')
-                    .eq('id', session.user.id)
-                    .single();
+            if (userError) {
+                console.error('[Auth] Kullanıcı bilgisi hatası:', userError.message);
+                return {
+                    id: authUser.id,
+                    email: authUser.email || '',
+                    role: 'admin' as const,
+                    companyId: '00000000-0000-0000-0000-000000000001',
+                    companyName: 'Varsayılan',
+                };
+            }
 
-                if (userError) {
-                    console.error('[Auth] Session kullanıcı bilgisi hatası:', userError.message);
-                    // Fallback: use session data
-                    setUser({
-                        id: session.user.id,
-                        email: session.user.email || '',
-                        role: 'admin',
-                        companyId: '00000000-0000-0000-0000-000000000001',
-                        companyName: 'Varsayılan',
-                    });
-                } else if (userData) {
-                    setUser({
-                        id: userData.id,
-                        email: userData.email,
-                        role: userData.role,
-                        companyId: userData.company_id,
-                        companyName: userData.companies?.name,
-                    });
+            return {
+                id: userData.id,
+                email: userData.email,
+                role: userData.role,
+                companyId: userData.company_id,
+                companyName: userData.companies?.name,
+            };
+        } catch {
+            return {
+                id: authUser.id,
+                email: authUser.email || '',
+                role: 'admin' as const,
+                companyId: '00000000-0000-0000-0000-000000000001',
+                companyName: 'Varsayılan',
+            };
+        }
+    };
+
+    // Check for existing session on mount with timeout protection
+    useEffect(() => {
+        let isMounted = true;
+
+        const checkSession = async () => {
+            if (!isSupabaseConfigured()) {
+                // Demo mode - check localStorage
+                const savedUser = localStorage.getItem('filoyo_user');
+                if (savedUser && isMounted) {
+                    setUser(JSON.parse(savedUser));
                 }
-            } else {
-                // No session - check localStorage for demo user
+                if (isMounted) setLoading(false);
+                return;
+            }
+
+            try {
+                // Add timeout to prevent infinite loading in production
+                const sessionPromise = (supabase as any).auth.getSession();
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Session check timeout')), 5000)
+                );
+
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+
+                if (!isMounted) return;
+
+                if (session?.user) {
+                    const userDetails = await fetchUserDetails(session.user);
+                    if (isMounted) setUser(userDetails);
+                } else {
+                    // No session - check localStorage for demo user
+                    const savedUser = localStorage.getItem('filoyo_user');
+                    if (savedUser && isMounted) {
+                        setUser(JSON.parse(savedUser));
+                    }
+                }
+            } catch (err) {
+                console.error('[Auth] Session check error:', err);
+                if (!isMounted) return;
+                // Fallback: check localStorage
                 const savedUser = localStorage.getItem('filoyo_user');
                 if (savedUser) {
                     setUser(JSON.parse(savedUser));
                 }
+            } finally {
+                if (isMounted) setLoading(false);
             }
-        } catch (err) {
-            console.error('Session check error:', err);
-            // Fallback: check localStorage
-            const savedUser = localStorage.getItem('filoyo_user');
-            if (savedUser) {
-                setUser(JSON.parse(savedUser));
-            }
-        } finally {
-            setLoading(false);
+        };
+
+        checkSession();
+
+        // Listen for auth state changes (handles token refresh, sign-in/out)
+        let subscription: { unsubscribe: () => void } | null = null;
+        if (isSupabaseConfigured()) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data } = (supabase as any).auth.onAuthStateChange(
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                async (_event: string, session: any) => {
+                    if (!isMounted) return;
+                    if (session?.user) {
+                        const userDetails = await fetchUserDetails(session.user);
+                        if (isMounted) setUser(userDetails);
+                    } else {
+                        // Check localStorage fallback on sign out
+                        const savedUser = localStorage.getItem('filoyo_user');
+                        if (savedUser && isMounted) {
+                            setUser(JSON.parse(savedUser));
+                        } else if (isMounted) {
+                            setUser(null);
+                        }
+                    }
+                }
+            );
+            subscription = data?.subscription;
         }
-    };
+
+        return () => {
+            isMounted = false;
+            subscription?.unsubscribe();
+        };
+    }, []);
 
     const login = async (email: string, password: string) => {
         setError(null);
