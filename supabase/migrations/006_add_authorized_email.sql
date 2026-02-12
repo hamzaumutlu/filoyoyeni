@@ -1,20 +1,39 @@
 -- ============================================
--- Filoyo CRM - Add authorized_email & Fix RLS
+-- Filoyo CRM - Fix ALL tables for persistence
 -- Run this in Supabase SQL Editor
 -- ============================================
 
--- 1. Add authorized_email column to companies
+-- 1. Add authorized_email to companies
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS authorized_email TEXT;
 
--- 2. Drop existing RLS policies on companies
-DROP POLICY IF EXISTS "Users can view own company" ON companies;
-DROP POLICY IF EXISTS "Super admin full access to companies" ON companies;
-DROP POLICY IF EXISTS "Users can view own company" ON companies;
+-- 2. Add method_id to advances (for payment method tracking)
+ALTER TABLE advances ADD COLUMN IF NOT EXISTS method_id UUID REFERENCES methods(id) ON DELETE SET NULL;
 
--- 3. Disable RLS on companies (admin panel - single tenant)
+-- 3. Insert demo company (needed for foreign key constraints)
+INSERT INTO companies (id, name, status)
+VALUES ('00000000-0000-0000-0000-000000000001', 'Filoyo Demo', 'active')
+ON CONFLICT (id) DO NOTHING;
+
+-- 4. Drop ALL existing RLS policies
+DO $$ 
+DECLARE
+    pol RECORD;
+BEGIN
+    FOR pol IN 
+        SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON %I', pol.policyname, pol.tablename);
+    END LOOP;
+END $$;
+
+-- 5. Disable RLS on ALL tables (admin panel - single tenant)
 ALTER TABLE companies DISABLE ROW LEVEL SECURITY;
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE personnel DISABLE ROW LEVEL SECURITY;
+ALTER TABLE advances DISABLE ROW LEVEL SECURITY;
+ALTER TABLE methods DISABLE ROW LEVEL SECURITY;
+ALTER TABLE data_entries DISABLE ROW LEVEL SECURITY;
+ALTER TABLE payments DISABLE ROW LEVEL SECURITY;
 
 -- ============================================
--- SUCCESS MESSAGE
--- ============================================
-SELECT 'Migration 006 applied: authorized_email added, RLS disabled on companies' AS result;
+SELECT 'Migration complete: RLS disabled, columns added, demo company created!' AS result;
