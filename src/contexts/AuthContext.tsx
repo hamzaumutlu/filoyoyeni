@@ -102,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 // Add timeout to prevent infinite loading in production
                 const sessionPromise = (supabase as any).auth.getSession();
                 const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Session check timeout')), 5000)
+                    setTimeout(() => reject(new Error('Session check timeout')), 3000)
                 );
 
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
