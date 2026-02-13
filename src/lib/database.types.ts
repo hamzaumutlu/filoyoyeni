@@ -238,6 +238,41 @@ export interface Database {
                     created_at?: string;
                 };
             };
+            activities: {
+                Row: {
+                    id: string;
+                    company_id: string;
+                    activity: string;
+                    order_id: string | null;
+                    date: string;
+                    time: string;
+                    amount: number;
+                    status: 'Tamamlandı' | 'Beklemede' | 'İptal';
+                    created_at: string;
+                };
+                Insert: {
+                    id?: string;
+                    company_id: string;
+                    activity: string;
+                    order_id?: string | null;
+                    date: string;
+                    time: string;
+                    amount: number;
+                    status?: 'Tamamlandı' | 'Beklemede' | 'İptal';
+                    created_at?: string;
+                };
+                Update: {
+                    id?: string;
+                    company_id?: string;
+                    activity?: string;
+                    order_id?: string | null;
+                    date?: string;
+                    time?: string;
+                    amount?: number;
+                    status?: 'Tamamlandı' | 'Beklemede' | 'İptal';
+                    created_at?: string;
+                };
+            };
         };
         Views: Record<string, never>;
         Functions: Record<string, never>;
@@ -253,3 +288,4 @@ export type Advance = Database['public']['Tables']['advances']['Row'];
 export type Method = Database['public']['Tables']['methods']['Row'];
 export type DataEntry = Database['public']['Tables']['data_entries']['Row'];
 export type Payment = Database['public']['Tables']['payments']['Row'];
+export type Activity = Database['public']['Tables']['activities']['Row'];

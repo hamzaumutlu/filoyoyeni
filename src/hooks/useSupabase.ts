@@ -155,12 +155,64 @@ function withTimeout(promise: Promise<any>, ms: number = QUERY_TIMEOUT_MS): Prom
     ]);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function throwSupabaseError(error: any): never {
+    console.error('[Supabase Error]', error);
+    const message = error?.message || error?.details || JSON.stringify(error) || 'Bilinmeyen veritabanı hatası';
+    throw new Error(message);
+}
+
+// Ensure the company exists before inserts (auto-creates if needed)
+async function ensureCompanyExists(companyId: string): Promise<string> {
+    if (!isSupabaseConfigured()) return companyId;
+
+    try {
+        // Check if ANY company exists
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: existing } = await (supabase as any)
+            .from('companies')
+            .select('id')
+            .eq('id', companyId)
+            .single();
+
+        if (existing) return companyId;
+
+        // Company doesn't exist - create the fallback company
+        console.warn('[useSupabase] Company not found, creating fallback company...');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: created, error: createError } = await (supabase as any)
+            .from('companies')
+            .upsert({ id: FALLBACK_COMPANY_ID, name: 'Filoyo Demo', status: 'active' }, { onConflict: 'id' })
+            .select()
+            .single();
+
+        if (createError) {
+            console.error('[useSupabase] Failed to create fallback company:', createError);
+            // Try to find ANY existing company
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: anyCompany } = await (supabase as any)
+                .from('companies')
+                .select('id')
+                .limit(1)
+                .single();
+            if (anyCompany) return anyCompany.id;
+            throw new Error('Veritabanında hiç firma bulunamadı. Lütfen önce Firmalar sayfasından bir firma ekleyin.');
+        }
+
+        return created.id;
+    } catch (err) {
+        if (err instanceof Error && err.message.includes('firma bulunamadı')) throw err;
+        console.error('[useSupabase] ensureCompanyExists error:', err);
+        return companyId;
+    }
+}
+
 // ============================================
 // Methods Hook
 // ============================================
 export function useMethodsSupabase() {
-    const { user } = useAuth();
-    const companyId = user?.companyId || FALLBACK_COMPANY_ID;
+    const { activeCompanyId } = useAuth();
+    const companyId = activeCompanyId || FALLBACK_COMPANY_ID;
     const [methods, setMethods] = useState<MethodData[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -177,6 +229,7 @@ export function useMethodsSupabase() {
             const { data, error: fetchError } = await withTimeout((supabase as any)
                 .from('methods')
                 .select('*')
+                .eq('company_id', companyId)
                 .order('created_at', { ascending: false }));
 
             if (fetchError) throw fetchError;
@@ -186,7 +239,7 @@ export function useMethodsSupabase() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [companyId]);
 
     useEffect(() => {
         fetchMethods();
@@ -204,7 +257,9 @@ export function useMethodsSupabase() {
             return newMethod;
         }
 
-        const dbData = mapMethodToDb({ ...method, companyId });
+        const validCompanyId = await ensureCompanyExists(companyId);
+        const dbData = mapMethodToDb({ ...method, companyId: validCompanyId });
+        console.log('[DEBUG] Adding method with companyId:', validCompanyId, 'dbData:', dbData);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
             .from('methods')
@@ -212,7 +267,8 @@ export function useMethodsSupabase() {
             .select()
             .single();
 
-        if (error) throw error;
+        console.log('[DEBUG] addMethod result:', { data, error });
+        if (error) throwSupabaseError(error);
         await fetchMethods();
         return mapMethodFromDb(data);
     };
@@ -230,7 +286,7 @@ export function useMethodsSupabase() {
             .update(dbData)
             .eq('id', id);
 
-        if (error) throw error;
+        if (error) throwSupabaseError(error);
         await fetchMethods();
     };
 
@@ -246,7 +302,7 @@ export function useMethodsSupabase() {
             .delete()
             .eq('id', id);
 
-        if (error) throw error;
+        if (error) throwSupabaseError(error);
         await fetchMethods();
     };
 
@@ -330,8 +386,8 @@ async function syncPaymentToDataEntry(methodId: string, date: string, syncCompan
 // Payments Hook
 // ============================================
 export function usePaymentsSupabase() {
-    const { user } = useAuth();
-    const companyId = user?.companyId || FALLBACK_COMPANY_ID;
+    const { activeCompanyId } = useAuth();
+    const companyId = activeCompanyId || FALLBACK_COMPANY_ID;
     const [payments, setPayments] = useState<PaymentData[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -348,6 +404,7 @@ export function usePaymentsSupabase() {
             const { data, error: fetchError } = await withTimeout((supabase as any)
                 .from('payments')
                 .select('*')
+                .eq('company_id', companyId)
                 .order('date', { ascending: false }));
 
             if (fetchError) throw fetchError;
@@ -357,7 +414,7 @@ export function usePaymentsSupabase() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [companyId]);
 
     useEffect(() => {
         fetchPayments();
@@ -375,7 +432,9 @@ export function usePaymentsSupabase() {
             return newPayment;
         }
 
-        const dbData = mapPaymentToDb({ ...payment, companyId });
+        const validCompanyId = await ensureCompanyExists(companyId);
+        const dbData = mapPaymentToDb({ ...payment, companyId: validCompanyId });
+        console.log('[DEBUG] Adding payment with companyId:', validCompanyId, 'dbData:', dbData);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
             .from('payments')
@@ -383,7 +442,9 @@ export function usePaymentsSupabase() {
             .select()
             .single();
 
-        if (error) throw error;
+        console.log('[DEBUG] addPayment result:', { data, error });
+
+        if (error) throwSupabaseError(error);
         await fetchPayments();
 
         // Sync to data_entries if linked to a method
@@ -410,7 +471,7 @@ export function usePaymentsSupabase() {
             .update(dbData)
             .eq('id', id);
 
-        if (error) throw error;
+        if (error) throwSupabaseError(error);
         await fetchPayments();
 
         // Sync old method+date (to subtract removed payment)
@@ -440,7 +501,7 @@ export function usePaymentsSupabase() {
             .delete()
             .eq('id', id);
 
-        if (error) throw error;
+        if (error) throwSupabaseError(error);
         await fetchPayments();
 
         // Sync to data_entries after deletion
@@ -456,8 +517,8 @@ export function usePaymentsSupabase() {
 // Personnel Hook
 // ============================================
 export function usePersonnelSupabase() {
-    const { user } = useAuth();
-    const companyId = user?.companyId || FALLBACK_COMPANY_ID;
+    const { activeCompanyId } = useAuth();
+    const companyId = activeCompanyId || FALLBACK_COMPANY_ID;
     const [personnel, setPersonnel] = useState<PersonnelData[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -474,6 +535,7 @@ export function usePersonnelSupabase() {
             const { data, error: fetchError } = await withTimeout((supabase as any)
                 .from('personnel')
                 .select('*')
+                .eq('company_id', companyId)
                 .order('created_at', { ascending: false }));
 
             if (fetchError) throw fetchError;
@@ -483,7 +545,7 @@ export function usePersonnelSupabase() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [companyId]);
 
     useEffect(() => {
         fetchPersonnel();
@@ -501,7 +563,9 @@ export function usePersonnelSupabase() {
             return newPerson;
         }
 
-        const dbData = mapPersonnelToDb({ ...person, companyId });
+        const validCompanyId = await ensureCompanyExists(companyId);
+        const dbData = mapPersonnelToDb({ ...person, companyId: validCompanyId });
+        console.log('[DEBUG] Adding personnel with companyId:', validCompanyId, 'dbData:', dbData);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
             .from('personnel')
@@ -509,7 +573,9 @@ export function usePersonnelSupabase() {
             .select()
             .single();
 
-        if (error) throw error;
+        console.log('[DEBUG] addPersonnel result:', { data, error });
+
+        if (error) throwSupabaseError(error);
         await fetchPersonnel();
         return mapPersonnelFromDb(data);
     };
@@ -527,7 +593,7 @@ export function usePersonnelSupabase() {
             .update(dbData)
             .eq('id', id);
 
-        if (error) throw error;
+        if (error) throwSupabaseError(error);
         await fetchPersonnel();
     };
 
@@ -543,7 +609,7 @@ export function usePersonnelSupabase() {
             .delete()
             .eq('id', id);
 
-        if (error) throw error;
+        if (error) throwSupabaseError(error);
         await fetchPersonnel();
     };
 
@@ -554,8 +620,8 @@ export function usePersonnelSupabase() {
 // Advances Hook
 // ============================================
 export function useAdvancesSupabase() {
-    const { user } = useAuth();
-    const companyId = user?.companyId || FALLBACK_COMPANY_ID;
+    const { activeCompanyId } = useAuth();
+    const companyId = activeCompanyId || FALLBACK_COMPANY_ID;
     const [advances, setAdvances] = useState<AdvanceData[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -572,6 +638,7 @@ export function useAdvancesSupabase() {
             const { data, error: fetchError } = await withTimeout((supabase as any)
                 .from('advances')
                 .select('*')
+                .eq('company_id', companyId)
                 .order('date', { ascending: false }));
 
             if (fetchError) throw fetchError;
@@ -581,7 +648,7 @@ export function useAdvancesSupabase() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [companyId]);
 
     useEffect(() => {
         fetchAdvances();
@@ -599,7 +666,8 @@ export function useAdvancesSupabase() {
             return newAdvance;
         }
 
-        const dbData = mapAdvanceToDb({ ...advance, companyId });
+        const validCompanyId = await ensureCompanyExists(companyId);
+        const dbData = mapAdvanceToDb({ ...advance, companyId: validCompanyId });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
             .from('advances')
@@ -607,7 +675,7 @@ export function useAdvancesSupabase() {
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) throwSupabaseError(error);
         await fetchAdvances();
         return mapAdvanceFromDb(data);
     };
@@ -624,7 +692,7 @@ export function useAdvancesSupabase() {
             .delete()
             .eq('id', id);
 
-        if (error) throw error;
+        if (error) throwSupabaseError(error);
         await fetchAdvances();
     };
 
@@ -686,8 +754,8 @@ const mapDataEntryToDb = (data: Partial<DataEntryData>) => ({
 });
 
 export function useDataEntriesSupabase(methodId?: string) {
-    const { user } = useAuth();
-    const companyId = user?.companyId || FALLBACK_COMPANY_ID;
+    const { activeCompanyId } = useAuth();
+    const companyId = activeCompanyId || FALLBACK_COMPANY_ID;
     const [dataEntries, setDataEntries] = useState<DataEntryData[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -704,6 +772,7 @@ export function useDataEntriesSupabase(methodId?: string) {
             let query = (supabase as any)
                 .from('data_entries')
                 .select('*')
+                .eq('company_id', companyId)
                 .order('date', { ascending: false });
 
             if (methodId) {
@@ -719,7 +788,7 @@ export function useDataEntriesSupabase(methodId?: string) {
         } finally {
             setLoading(false);
         }
-    }, [methodId]);
+    }, [methodId, companyId]);
 
     useEffect(() => {
         fetchDataEntries();
@@ -738,7 +807,8 @@ export function useDataEntriesSupabase(methodId?: string) {
             return newEntry;
         }
 
-        const dbData = mapDataEntryToDb({ ...entry, companyId });
+        const validCompanyId = await ensureCompanyExists(companyId);
+        const dbData = mapDataEntryToDb({ ...entry, companyId: validCompanyId });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
             .from('data_entries')
@@ -746,7 +816,7 @@ export function useDataEntriesSupabase(methodId?: string) {
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) throwSupabaseError(error);
         await fetchDataEntries();
         return mapDataEntryFromDb(data);
     };
@@ -764,7 +834,7 @@ export function useDataEntriesSupabase(methodId?: string) {
             .update(dbData)
             .eq('id', id);
 
-        if (error) throw error;
+        if (error) throwSupabaseError(error);
         await fetchDataEntries();
     };
 
@@ -780,7 +850,7 @@ export function useDataEntriesSupabase(methodId?: string) {
             .delete()
             .eq('id', id);
 
-        if (error) throw error;
+        if (error) throwSupabaseError(error);
         await fetchDataEntries();
     };
 
@@ -878,7 +948,7 @@ export function useCompaniesSupabase() {
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) throwSupabaseError(error);
         await fetchCompanies();
         return mapCompanyFromDb(data);
     };
@@ -896,7 +966,7 @@ export function useCompaniesSupabase() {
             .update(dbData)
             .eq('id', id);
 
-        if (error) throw error;
+        if (error) throwSupabaseError(error);
         await fetchCompanies();
     };
 
@@ -917,4 +987,142 @@ export function useCompaniesSupabase() {
     };
 
     return { companies, loading, error, addCompany, updateCompany, deleteCompany, refetch: fetchCompanies };
+}
+
+// ============================================
+// Activity Type and Hook
+// ============================================
+export interface ActivityData {
+    id: string;
+    companyId: string;
+    activity: string;
+    orderId?: string;
+    date: string;
+    time: string;
+    amount: number;
+    status: 'Tamamlandı' | 'Beklemede' | 'İptal';
+    createdAt: string;
+}
+
+const mapActivityFromDb = (row: Record<string, unknown>): ActivityData => ({
+    id: row.id as string,
+    companyId: row.company_id as string,
+    activity: row.activity as string,
+    orderId: row.order_id as string | undefined,
+    date: row.date as string,
+    time: row.time as string,
+    amount: row.amount as number,
+    status: row.status as 'Tamamlandı' | 'Beklemede' | 'İptal',
+    createdAt: row.created_at as string,
+});
+
+const mapActivityToDb = (data: Partial<ActivityData>) => ({
+    ...(data.companyId && { company_id: data.companyId }),
+    ...(data.activity && { activity: data.activity }),
+    ...(data.orderId !== undefined && { order_id: data.orderId || null }),
+    ...(data.date && { date: data.date }),
+    ...(data.time && { time: data.time }),
+    ...(data.amount !== undefined && { amount: data.amount }),
+    ...(data.status && { status: data.status }),
+});
+
+export function useActivitiesSupabase() {
+    const { activeCompanyId } = useAuth();
+    const companyId = activeCompanyId || FALLBACK_COMPANY_ID;
+    const [activities, setActivities] = useState<ActivityData[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchActivities = useCallback(async () => {
+        if (!isSupabaseConfigured()) {
+            setLoading(false);
+            return;
+        }
+
+        try {
+            setLoading(true);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data, error: fetchError } = await withTimeout((supabase as any)
+                .from('activities')
+                .select('*')
+                .eq('company_id', companyId)
+                .order('date', { ascending: false }));
+
+            if (fetchError) throw fetchError;
+            setActivities((data || []).map(mapActivityFromDb));
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Bir hata oluştu');
+        } finally {
+            setLoading(false);
+        }
+    }, [companyId]);
+
+    useEffect(() => {
+        fetchActivities();
+    }, [fetchActivities]);
+
+    const addActivity = async (activity: Omit<ActivityData, 'id' | 'createdAt' | 'companyId'>) => {
+        if (!isSupabaseConfigured()) {
+            const newActivity: ActivityData = {
+                id: Date.now().toString(),
+                companyId,
+                ...activity,
+                createdAt: new Date().toISOString(),
+            };
+            setActivities((prev) => [newActivity, ...prev]);
+            return newActivity;
+        }
+
+        const validCompanyId = await ensureCompanyExists(companyId);
+        const dbData = {
+            ...mapActivityToDb({ ...activity, companyId: validCompanyId }),
+            company_id: validCompanyId, // explicit - bypasses conditional spread
+        };
+        console.log('[DEBUG] addActivity payload:', dbData);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+            .from('activities')
+            .insert(dbData)
+            .select()
+            .single();
+
+        if (error) throwSupabaseError(error);
+        await fetchActivities();
+        return mapActivityFromDb(data);
+    };
+
+    const updateActivity = async (id: string, updates: Partial<ActivityData>) => {
+        if (!isSupabaseConfigured()) {
+            setActivities((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)));
+            return;
+        }
+
+        const dbData = mapActivityToDb(updates);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+            .from('activities')
+            .update(dbData)
+            .eq('id', id);
+
+        if (error) throwSupabaseError(error);
+        await fetchActivities();
+    };
+
+    const deleteActivity = async (id: string) => {
+        if (!isSupabaseConfigured()) {
+            setActivities((prev) => prev.filter((a) => a.id !== id));
+            return;
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+            .from('activities')
+            .delete()
+            .eq('id', id);
+
+        if (error) throwSupabaseError(error);
+        await fetchActivities();
+    };
+
+    return { activities, loading, error, addActivity, updateActivity, deleteActivity, refetch: fetchActivities };
 }

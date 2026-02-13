@@ -187,9 +187,10 @@ export default function Payments() {
                 });
             }
             resetForm();
-        } catch (err) {
-            console.error('Submit error:', err);
-            alert('İşlem başarısız oldu: ' + (err instanceof Error ? err.message : 'Bilinmeyen hata'));
+        } catch (err: unknown) {
+            console.error('[Payments] Submit error:', err);
+            const msg = err instanceof Error ? err.message : (err as Record<string, string>)?.message || JSON.stringify(err);
+            alert('İşlem başarısız oldu: ' + msg);
         } finally {
             setIsSubmitting(false);
         }

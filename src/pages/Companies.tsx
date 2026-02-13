@@ -20,6 +20,7 @@ import {
 import { MainLayout } from '../components/layout';
 import { Card, Button, Modal, Input } from '../components/ui';
 import { useCompaniesSupabase, type CompanyData } from '../hooks/useSupabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface FormData {
     name: string;
@@ -30,6 +31,7 @@ interface FormData {
 export default function Companies() {
     // Use Supabase hook
     const { companies: rawCompanies, loading, addCompany, updateCompany, deleteCompany } = useCompaniesSupabase();
+    const { refreshCompanies } = useAuth();
 
     // Transform to UI format
     const companies = useMemo(() =>
@@ -145,12 +147,18 @@ export default function Companies() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Bu firmayı silmek istediğinize emin misiniz?')) return;
+        if (!confirm('⚠️ DİKKAT: Bu firmayı silmek istediğinize emin misiniz?\n\nFirmaya bağlı veriler varsa (yöntemler, ödemeler, personel vb.) silme işlemi engellenecektir. Önce bağlı verileri silmeniz gerekir.')) return;
         try {
             await deleteCompany(id);
-        } catch (err) {
-            console.error('Delete error:', err);
-            alert('Silme işlemi başarısız oldu');
+            await refreshCompanies();
+        } catch (err: unknown) {
+            console.error('[Companies] Delete error:', err);
+            const msg = err instanceof Error ? err.message : (err as Record<string, string>)?.message || JSON.stringify(err);
+            if (msg.includes('violates foreign key constraint') || msg.includes('RESTRICT')) {
+                alert('Bu firma silinemez çünkü firmaya bağlı kayıtlar (yöntemler, ödemeler, personel vb.) mevcut. Önce bu kayıtları silmeniz veya başka bir firmaya taşımanız gerekir.');
+            } else {
+                alert('Silme işlemi başarısız oldu: ' + msg);
+            }
         }
     };
 
@@ -171,6 +179,7 @@ export default function Companies() {
                     status: 'active',
                 });
             }
+            await refreshCompanies();
             resetForm();
         } catch (err) {
             console.error('Submit error:', err);

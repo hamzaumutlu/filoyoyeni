@@ -179,8 +179,10 @@ export default function Methods() {
         if (!confirm('Bu yöntemi silmek istediğinize emin misiniz?')) return;
         try {
             await deleteMethod(id);
-        } catch (err) {
-            alert('Silme işlemi başarısız: ' + (err instanceof Error ? err.message : 'Bilinmeyen hata'));
+        } catch (err: unknown) {
+            console.error('[Methods] Delete error:', err);
+            const msg = err instanceof Error ? err.message : (err as Record<string, string>)?.message || JSON.stringify(err);
+            alert('Silme işlemi başarısız: ' + msg);
         }
     };
 
@@ -212,8 +214,10 @@ export default function Methods() {
                 });
             }
             resetForm();
-        } catch (err) {
-            alert('İşlem başarısız: ' + (err instanceof Error ? err.message : 'Bilinmeyen hata'));
+        } catch (err: unknown) {
+            console.error('[Methods] Submit error:', err);
+            const msg = err instanceof Error ? err.message : (err as Record<string, string>)?.message || JSON.stringify(err);
+            alert('İşlem başarısız: ' + msg);
         } finally {
             setIsSubmitting(false);
         }

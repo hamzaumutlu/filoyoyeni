@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 // ============================================
@@ -12,6 +12,11 @@ interface User {
     companyName?: string;
 }
 
+export interface CompanyInfo {
+    id: string;
+    name: string;
+}
+
 interface AuthContextType {
     user: User | null;
     loading: boolean;
@@ -21,6 +26,12 @@ interface AuthContextType {
     createUser: (email: string, password: string, role: 'admin' | 'user', companyId: string) => Promise<void>;
     isAdmin: boolean;
     isSuperAdmin: boolean;
+    // Multi-company support
+    activeCompanyId: string;
+    activeCompanyName: string;
+    companies: CompanyInfo[];
+    switchCompany: (companyId: string) => void;
+    refreshCompanies: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -43,6 +54,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [companies, setCompanies] = useState<CompanyInfo[]>([]);
+    const [activeCompanyId, setActiveCompanyId] = useState<string>('');
+    const [activeCompanyName, setActiveCompanyName] = useState<string>('');
 
     // Helper: fetch user details from users table
     const fetchUserDetails = async (authUser: { id: string; email?: string }) => {
@@ -56,30 +70,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             if (userError) {
                 console.error('[Auth] Kullanıcı bilgisi hatası:', userError.message);
+                // Try to find a valid company for fallback
+                const validCompanyId = await findValidCompanyId();
                 return {
                     id: authUser.id,
                     email: authUser.email || '',
                     role: 'admin' as const,
-                    companyId: '00000000-0000-0000-0000-000000000001',
+                    companyId: validCompanyId,
                     companyName: 'Varsayılan',
                 };
+            }
+
+            // Check if user's company actually exists (companies JOIN might be null if deleted)
+            let companyId = userData.company_id;
+            let companyName = userData.companies?.name;
+
+            if (!companyName && companyId) {
+                console.warn('[Auth] Kullanıcının şirketi silinmiş, geçerli bir şirket atanıyor...');
+                companyId = await findValidCompanyId();
+                // Update user's company_id in database
+                await (supabase as any)
+                    .from('users')
+                    .update({ company_id: companyId })
+                    .eq('id', userData.id);
+                companyName = 'Varsayılan';
             }
 
             return {
                 id: userData.id,
                 email: userData.email,
                 role: userData.role,
-                companyId: userData.company_id,
-                companyName: userData.companies?.name,
+                companyId,
+                companyName,
             };
         } catch {
+            const validCompanyId = await findValidCompanyId();
             return {
                 id: authUser.id,
                 email: authUser.email || '',
                 role: 'admin' as const,
-                companyId: '00000000-0000-0000-0000-000000000001',
+                companyId: validCompanyId,
                 companyName: 'Varsayılan',
             };
+        }
+    };
+
+    // Helper: find a valid company_id from the companies table
+    const findValidCompanyId = async (): Promise<string> => {
+        const FALLBACK = '00000000-0000-0000-0000-000000000001';
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data } = await (supabase as any)
+                .from('companies')
+                .select('id')
+                .limit(1)
+                .single();
+            return data?.id || FALLBACK;
+        } catch {
+            return FALLBACK;
         }
     };
 
@@ -219,12 +267,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (userError) {
                     console.error('[Auth] Kullanıcı bilgi sorgulama hatası:', userError.message, userError);
                     // User authenticated but no record in users table
-                    // Create a fallback user from auth data
+                    const validCompanyId = await findValidCompanyId();
                     const fallbackUser: User = {
                         id: data.user.id,
                         email: data.user.email || email,
                         role: 'admin',
-                        companyId: '00000000-0000-0000-0000-000000000001',
+                        companyId: validCompanyId,
                         companyName: 'Varsayılan',
                     };
                     setUser(fallbackUser);
@@ -232,12 +280,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     return;
                 }
 
+                // Validate company exists
+                let companyId = userData.company_id;
+                let companyName = userData.companies?.name;
+                if (!companyName && companyId) {
+                    companyId = await findValidCompanyId();
+                    companyName = 'Varsayılan';
+                    // Fix in database
+                    await (supabase as any)
+                        .from('users')
+                        .update({ company_id: companyId })
+                        .eq('id', userData.id);
+                }
+
                 const loggedInUser: User = {
                     id: userData.id,
                     email: userData.email,
                     role: userData.role,
-                    companyId: userData.company_id,
-                    companyName: userData.companies?.name,
+                    companyId,
+                    companyName,
                 };
 
                 setUser(loggedInUser);
@@ -260,7 +321,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 await (supabase as any).auth.signOut();
             }
             setUser(null);
+            setCompanies([]);
+            setActiveCompanyId('');
+            setActiveCompanyName('');
             localStorage.removeItem('filoyo_user');
+            localStorage.removeItem('filoyo_active_company');
         } catch (err) {
             console.error('Logout error:', err);
         }
@@ -314,6 +379,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
+    // Fetch companies list
+    const refreshCompanies = useCallback(async () => {
+        if (!isSupabaseConfigured()) return;
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data, error: fetchError } = await (supabase as any)
+                .from('companies')
+                .select('id, name')
+                .order('name');
+            if (!fetchError && data) {
+                setCompanies(data);
+            }
+        } catch (err) {
+            console.error('[Auth] Companies fetch error:', err);
+        }
+    }, []);
+
+    // Fetch companies when user is set
+    useEffect(() => {
+        if (user) {
+            refreshCompanies();
+            // Restore saved active company or use user's default
+            const saved = localStorage.getItem('filoyo_active_company');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    setActiveCompanyId(parsed.id);
+                    setActiveCompanyName(parsed.name);
+                } catch {
+                    setActiveCompanyId(user.companyId);
+                    setActiveCompanyName(user.companyName || 'Firma');
+                }
+            } else {
+                setActiveCompanyId(user.companyId);
+                setActiveCompanyName(user.companyName || 'Firma');
+            }
+        }
+    }, [user, refreshCompanies]);
+
+    // Switch company
+    const switchCompany = (companyId: string) => {
+        const company = companies.find(c => c.id === companyId);
+        if (company) {
+            setActiveCompanyId(company.id);
+            setActiveCompanyName(company.name);
+            localStorage.setItem('filoyo_active_company', JSON.stringify({ id: company.id, name: company.name }));
+        }
+    };
+
     const value: AuthContextType = {
         user,
         loading,
@@ -323,6 +437,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         createUser,
         isAdmin: user?.role === 'admin' || user?.role === 'super_admin',
         isSuperAdmin: user?.role === 'super_admin',
+        activeCompanyId: activeCompanyId || user?.companyId || '',
+        activeCompanyName: activeCompanyName || user?.companyName || '',
+        companies,
+        switchCompany,
+        refreshCompanies,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

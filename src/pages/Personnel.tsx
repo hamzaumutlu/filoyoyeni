@@ -362,9 +362,10 @@ export default function PersonnelPage() {
                 });
             }
             resetPersonnelForm();
-        } catch (err) {
-            console.error('Submit error:', err);
-            alert('İşlem başarısız oldu: ' + (err instanceof Error ? err.message : 'Bilinmeyen hata'));
+        } catch (err: unknown) {
+            console.error('[Personnel] Submit error:', err);
+            const msg = err instanceof Error ? err.message : (err as Record<string, string>)?.message || JSON.stringify(err);
+            alert('İşlem başarısız oldu: ' + msg);
         } finally {
             setIsSubmitting(false);
         }
@@ -383,9 +384,10 @@ export default function PersonnelPage() {
                 description: advanceForm.description || undefined,
             });
             setIsAdvanceModalOpen(false);
-        } catch (err) {
-            console.error('Advance submit error:', err);
-            alert('Avans eklenemedi: ' + (err instanceof Error ? err.message : 'Bilinmeyen hata'));
+        } catch (err: unknown) {
+            console.error('[Personnel] Advance submit error:', err);
+            const msg = err instanceof Error ? err.message : (err as Record<string, string>)?.message || JSON.stringify(err);
+            alert('Avans eklenemedi: ' + msg);
         } finally {
             setIsSubmitting(false);
         }
