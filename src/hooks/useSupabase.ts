@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 // ============================================
 // Types matching frontend conventions (camelCase)
@@ -135,9 +136,9 @@ const mapAdvanceToDb = (data: Partial<AdvanceData>) => ({
 });
 
 // ============================================
-// Demo Company ID (for development)
+// Fallback Company ID (only for demo/offline mode)
 // ============================================
-const DEMO_COMPANY_ID = '00000000-0000-0000-0000-000000000001';
+const FALLBACK_COMPANY_ID = '00000000-0000-0000-0000-000000000001';
 
 // ============================================
 // Timeout Helper - prevents queries from hanging
@@ -158,6 +159,8 @@ function withTimeout(promise: Promise<any>, ms: number = QUERY_TIMEOUT_MS): Prom
 // Methods Hook
 // ============================================
 export function useMethodsSupabase() {
+    const { user } = useAuth();
+    const companyId = user?.companyId || FALLBACK_COMPANY_ID;
     const [methods, setMethods] = useState<MethodData[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -193,7 +196,7 @@ export function useMethodsSupabase() {
         if (!isSupabaseConfigured()) {
             const newMethod: MethodData = {
                 id: Date.now().toString(),
-                companyId: DEMO_COMPANY_ID,
+                companyId,
                 ...method,
                 createdAt: new Date().toISOString(),
             };
@@ -201,7 +204,7 @@ export function useMethodsSupabase() {
             return newMethod;
         }
 
-        const dbData = mapMethodToDb({ ...method, companyId: DEMO_COMPANY_ID });
+        const dbData = mapMethodToDb({ ...method, companyId });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
             .from('methods')
@@ -255,7 +258,7 @@ export function useMethodsSupabase() {
 // When a payment is linked to a method, sync the
 // total payments for that method+date into data_entries
 // ============================================
-async function syncPaymentToDataEntry(methodId: string, date: string) {
+async function syncPaymentToDataEntry(methodId: string, date: string, syncCompanyId: string) {
     if (!isSupabaseConfigured() || !methodId) return;
 
     try {
@@ -305,7 +308,7 @@ async function syncPaymentToDataEntry(methodId: string, date: string) {
                 .from('data_entries')
                 .insert({
                     method_id: methodId,
-                    company_id: DEMO_COMPANY_ID,
+                    company_id: syncCompanyId,
                     date,
                     supplement: 0,
                     entry: 0,
@@ -327,6 +330,8 @@ async function syncPaymentToDataEntry(methodId: string, date: string) {
 // Payments Hook
 // ============================================
 export function usePaymentsSupabase() {
+    const { user } = useAuth();
+    const companyId = user?.companyId || FALLBACK_COMPANY_ID;
     const [payments, setPayments] = useState<PaymentData[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -362,7 +367,7 @@ export function usePaymentsSupabase() {
         if (!isSupabaseConfigured()) {
             const newPayment: PaymentData = {
                 id: Date.now().toString(),
-                companyId: DEMO_COMPANY_ID,
+                companyId,
                 ...payment,
                 createdAt: new Date().toISOString(),
             };
@@ -370,7 +375,7 @@ export function usePaymentsSupabase() {
             return newPayment;
         }
 
-        const dbData = mapPaymentToDb({ ...payment, companyId: DEMO_COMPANY_ID });
+        const dbData = mapPaymentToDb({ ...payment, companyId });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
             .from('payments')
@@ -383,7 +388,7 @@ export function usePaymentsSupabase() {
 
         // Sync to data_entries if linked to a method
         if (payment.methodId) {
-            await syncPaymentToDataEntry(payment.methodId, payment.date);
+            await syncPaymentToDataEntry(payment.methodId, payment.date, companyId);
         }
 
         return mapPaymentFromDb(data);
@@ -410,13 +415,13 @@ export function usePaymentsSupabase() {
 
         // Sync old method+date (to subtract removed payment)
         if (oldPayment?.methodId && oldPayment?.date) {
-            await syncPaymentToDataEntry(oldPayment.methodId, oldPayment.date);
+            await syncPaymentToDataEntry(oldPayment.methodId, oldPayment.date, companyId);
         }
         // Sync new method+date
         const newMethodId = updates.methodId ?? oldPayment?.methodId;
         const newDate = updates.date ?? oldPayment?.date;
         if (newMethodId && newDate && (newMethodId !== oldPayment?.methodId || newDate !== oldPayment?.date)) {
-            await syncPaymentToDataEntry(newMethodId, newDate);
+            await syncPaymentToDataEntry(newMethodId, newDate, companyId);
         }
     };
 
@@ -440,7 +445,7 @@ export function usePaymentsSupabase() {
 
         // Sync to data_entries after deletion
         if (deletedPayment?.methodId && deletedPayment?.date) {
-            await syncPaymentToDataEntry(deletedPayment.methodId, deletedPayment.date);
+            await syncPaymentToDataEntry(deletedPayment.methodId, deletedPayment.date, companyId);
         }
     };
 
@@ -451,6 +456,8 @@ export function usePaymentsSupabase() {
 // Personnel Hook
 // ============================================
 export function usePersonnelSupabase() {
+    const { user } = useAuth();
+    const companyId = user?.companyId || FALLBACK_COMPANY_ID;
     const [personnel, setPersonnel] = useState<PersonnelData[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -486,7 +493,7 @@ export function usePersonnelSupabase() {
         if (!isSupabaseConfigured()) {
             const newPerson: PersonnelData = {
                 id: Date.now().toString(),
-                companyId: DEMO_COMPANY_ID,
+                companyId,
                 ...person,
                 createdAt: new Date().toISOString(),
             };
@@ -494,7 +501,7 @@ export function usePersonnelSupabase() {
             return newPerson;
         }
 
-        const dbData = mapPersonnelToDb({ ...person, companyId: DEMO_COMPANY_ID });
+        const dbData = mapPersonnelToDb({ ...person, companyId });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
             .from('personnel')
@@ -547,6 +554,8 @@ export function usePersonnelSupabase() {
 // Advances Hook
 // ============================================
 export function useAdvancesSupabase() {
+    const { user } = useAuth();
+    const companyId = user?.companyId || FALLBACK_COMPANY_ID;
     const [advances, setAdvances] = useState<AdvanceData[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -582,7 +591,7 @@ export function useAdvancesSupabase() {
         if (!isSupabaseConfigured()) {
             const newAdvance: AdvanceData = {
                 id: Date.now().toString(),
-                companyId: DEMO_COMPANY_ID,
+                companyId,
                 ...advance,
                 createdAt: new Date().toISOString(),
             };
@@ -590,7 +599,7 @@ export function useAdvancesSupabase() {
             return newAdvance;
         }
 
-        const dbData = mapAdvanceToDb({ ...advance, companyId: DEMO_COMPANY_ID });
+        const dbData = mapAdvanceToDb({ ...advance, companyId });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
             .from('advances')
@@ -677,6 +686,8 @@ const mapDataEntryToDb = (data: Partial<DataEntryData>) => ({
 });
 
 export function useDataEntriesSupabase(methodId?: string) {
+    const { user } = useAuth();
+    const companyId = user?.companyId || FALLBACK_COMPANY_ID;
     const [dataEntries, setDataEntries] = useState<DataEntryData[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -718,7 +729,7 @@ export function useDataEntriesSupabase(methodId?: string) {
         if (!isSupabaseConfigured()) {
             const newEntry: DataEntryData = {
                 id: Date.now().toString(),
-                companyId: DEMO_COMPANY_ID,
+                companyId,
                 ...entry,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
@@ -727,7 +738,7 @@ export function useDataEntriesSupabase(methodId?: string) {
             return newEntry;
         }
 
-        const dbData = mapDataEntryToDb({ ...entry, companyId: DEMO_COMPANY_ID });
+        const dbData = mapDataEntryToDb({ ...entry, companyId });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
             .from('data_entries')
