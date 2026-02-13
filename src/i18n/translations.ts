@@ -19,6 +19,8 @@ const tr: TranslationDictionary = {
     'nav.users': 'Kullanıcılar',
     'nav.settings': 'Ayarlar',
     'nav.logout': 'Çıkış',
+    'nav.more': 'Daha Fazla',
+    'nav.menu': 'Menü',
 
     // Header
     'header.search': 'Ara...',
@@ -151,6 +153,8 @@ const en: TranslationDictionary = {
     'nav.users': 'Users',
     'nav.settings': 'Settings',
     'nav.logout': 'Logout',
+    'nav.more': 'More',
+    'nav.menu': 'Menu',
 
     // Header
     'header.search': 'Search...',

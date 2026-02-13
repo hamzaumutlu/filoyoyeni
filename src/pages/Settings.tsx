@@ -237,10 +237,19 @@ export default function SettingsPage() {
 
         setChangingPassword(true);
         try {
-            if (isSupabaseConfigured() && supabase && authUser?.email) {
-                // Re-authenticate with current password
+            if (isSupabaseConfigured() && supabase) {
+                // First sign in with current password to verify identity
+                // Use the email from auth context
+                const email = authUser?.email;
+                if (!email) {
+                    showToast('error', 'Kullanıcı oturumu bulunamadı. Tekrar giriş yapın.');
+                    setChangingPassword(false);
+                    return;
+                }
+
+                // Sign in fresh to get a valid session
                 const { error: signInError } = await supabase.auth.signInWithPassword({
-                    email: authUser.email,
+                    email,
                     password: security.currentPassword,
                 });
 
@@ -250,7 +259,7 @@ export default function SettingsPage() {
                     return;
                 }
 
-                // Update password
+                // Now we have a fresh session, update the password
                 const { error: updateError } = await supabase.auth.updateUser({
                     password: security.newPassword,
                 });
