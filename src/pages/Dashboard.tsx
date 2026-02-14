@@ -386,7 +386,7 @@ export default function Dashboard() {
     return (
         <MainLayout breadcrumb={['Dashboard']}>
             {/* Page Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 relative z-10">
                 <div>
                     <h1 className="text-xl sm:text-2xl font-bold text-white">Genel Bakış</h1>
                     <p className="text-[var(--color-text-secondary)] mt-1 text-sm">Tüm verilerinizin özeti aşağıda</p>
@@ -405,7 +405,7 @@ export default function Dashboard() {
                             <span className={`text-xs transition-transform ${showMonthPicker ? 'rotate-180' : ''}`}>▼</span>
                         </button>
                         {showMonthPicker && (
-                            <div className="absolute right-0 sm:left-0 top-full mt-2 w-56 bg-[var(--color-bg-card)] border border-[var(--color-border-glass)] rounded-xl shadow-2xl z-50 overflow-hidden">
+                            <div className="absolute left-0 top-full mt-2 w-56 bg-[var(--color-bg-card)] border border-[var(--color-border-glass)] rounded-xl shadow-2xl z-50 overflow-hidden">
                                 <div className="p-2 border-b border-[var(--color-border-glass)]">
                                     <p className="text-xs text-[var(--color-text-muted)] px-2 py-1">Dönem Seçin</p>
                                 </div>
