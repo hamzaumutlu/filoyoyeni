@@ -1,9 +1,11 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import {
     ArrowUpRight,
+    ArrowDownRight,
     Wallet,
     Vault,
     TrendingUp,
+    TrendingDown,
     MoreHorizontal,
     Filter,
     Search,
@@ -51,6 +53,8 @@ const cashFlowData = [
 interface ActivityFormData {
     activity: string;
     orderId: string;
+    type: string;
+    note: string;
     date: string;
     time: string;
     amount: string;
@@ -60,6 +64,8 @@ interface ActivityFormData {
 const emptyForm: ActivityFormData = {
     activity: '',
     orderId: '',
+    type: 'Gelir',
+    note: '',
     date: new Date().toISOString().split('T')[0],
     time: new Date().toTimeString().slice(0, 5),
     amount: '',
@@ -71,6 +77,12 @@ const statusOptions = [
     { value: 'Beklemede', label: 'Beklemede' },
     { value: 'Tamamlandı', label: 'Tamamlandı' },
     { value: 'İptal', label: 'İptal' },
+];
+
+// Type options for dropdown
+const typeOptions = [
+    { value: 'Gelir', label: '↑ Gelir' },
+    { value: 'Gider', label: '↓ Gider' },
 ];
 
 export default function Dashboard() {
@@ -97,6 +109,24 @@ export default function Dashboard() {
         updateActivity,
         deleteActivity,
     } = useActivitiesSupabase();
+
+    // Calculate income/expense totals from activities
+    const totalIncome = useMemo(() => {
+        return activities
+            .filter((a: ActivityData) => a.type === 'Gelir' && a.status !== 'İptal')
+            .reduce((sum, a: ActivityData) => sum + a.amount, 0);
+    }, [activities]);
+
+    const totalExpense = useMemo(() => {
+        return activities
+            .filter((a: ActivityData) => a.type === 'Gider' && a.status !== 'İptal')
+            .reduce((sum, a: ActivityData) => sum + a.amount, 0);
+    }, [activities]);
+
+    // Net balance = methods + income - expense - payments
+    const netBalance = useMemo(() => {
+        return totalMethodBalance + totalIncome - totalExpense - totalPayments;
+    }, [totalMethodBalance, totalIncome, totalExpense, totalPayments]);
 
     // Month picker state
     const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -275,6 +305,8 @@ export default function Dashboard() {
         setActivityForm({
             activity: act.activity,
             orderId: act.orderId || '',
+            type: act.type || 'Gelir',
+            note: act.note || '',
             date: act.date,
             time: act.time?.slice(0, 5) || '12:00',
             amount: String(act.amount),
@@ -309,6 +341,8 @@ export default function Dashboard() {
             const payload = {
                 activity: activityForm.activity,
                 orderId: activityForm.orderId || undefined,
+                type: activityForm.type as 'Gelir' | 'Gider',
+                note: activityForm.note || undefined,
                 date: activityForm.date,
                 time: activityForm.time + ':00',
                 amount: parseFloat(activityForm.amount),
@@ -345,23 +379,8 @@ export default function Dashboard() {
         }
     };
 
-    const formatTime = (timeStr: string) => {
-        if (!timeStr) return '';
-        return timeStr.slice(0, 5);
-    };
-
     const formatCurrency = (amount: number) => {
         return `₺${amount.toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-    };
-
-    // Get activity icon color based on type
-    const getActivityIcon = (activityName: string) => {
-        const lower = activityName.toLowerCase();
-        if (lower.includes('kiralama') || lower.includes('araç')) return 'gradient-orange';
-        if (lower.includes('komisyon')) return 'bg-blue-500';
-        if (lower.includes('avans') || lower.includes('personel')) return 'bg-emerald-500';
-        if (lower.includes('bakım')) return 'bg-red-500';
-        return 'gradient-orange';
     };
 
     return (
@@ -434,91 +453,105 @@ export default function Dashboard() {
 
             {/* KPI Cards Row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                {/* My Balance Card */}
+                {/* Net Balance Card */}
                 <Card variant="gradient-orange" className="relative overflow-hidden">
-                    <div className="absolute top-4 right-4">
-                        <button className="text-white/70 hover:text-white">
-                            <MoreHorizontal className="w-5 h-5" />
-                        </button>
-                    </div>
                     <div className="flex items-center gap-3 mb-4">
                         <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
                             <Wallet className="w-5 h-5 text-white" />
                         </div>
                         <div>
-                            <p className="text-white/80 text-sm">Bakiyem</p>
-                            <p className="text-white/60 text-xs">Toplam Kasa</p>
+                            <p className="text-white/80 text-sm">Net Bakiye</p>
+                            <p className="text-white/60 text-xs">Kasa + Gelir - Gider - Ödemeler</p>
+                        </div>
+                    </div>
+                    <div>
+                        <p className="text-2xl sm:text-3xl font-bold text-white break-all">
+                            ₺{netBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-white/60 text-xs mt-1">Kasa: ₺{totalMethodBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+                    </div>
+                </Card>
+
+                {/* Total Income Card */}
+                <Card variant="default" hover className="relative">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                            <TrendingUp className="w-5 h-5 text-emerald-400" />
+                        </div>
+                        <div>
+                            <p className="text-white text-sm font-medium">Toplam Gelir</p>
+                            <p className="text-[var(--color-text-muted)] text-xs">{activities.filter(a => a.type === 'Gelir' && a.status !== 'İptal').length} işlem</p>
                         </div>
                     </div>
                     <div className="flex items-end justify-between">
-                        <div>
-                            <p className="text-2xl sm:text-3xl font-bold text-white break-all">
-                                ₺{totalMethodBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                            </p>
-                            <p className="text-white/80 text-sm mt-1 flex items-center gap-1">
-                                <span className="text-white/60 text-xs">{activeMethods.length} aktif yöntem</span>
-                            </p>
-                        </div>
+                        <p className="text-2xl font-bold text-emerald-400">
+                            +₺{totalIncome.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                        </p>
+                        <span className="flex items-center gap-0.5 text-emerald-400 text-sm">
+                            <ArrowUpRight className="w-4 h-4" />
+                        </span>
                     </div>
-                    <button className="mt-4 text-white/90 text-sm flex items-center gap-2 hover:text-white">
-                        Detayları Gör <ArrowUpRight className="w-4 h-4" />
-                    </button>
                 </Card>
 
-                {/* Total Payments Card */}
+                {/* Total Expense Card */}
                 <Card variant="default" hover className="relative">
-                    <div className="absolute top-4 right-4">
-                        <button className="text-[var(--color-text-muted)] hover:text-white">
-                            <MoreHorizontal className="w-5 h-5" />
-                        </button>
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
+                            <TrendingDown className="w-5 h-5 text-red-400" />
+                        </div>
+                        <div>
+                            <p className="text-white text-sm font-medium">Toplam Gider</p>
+                            <p className="text-[var(--color-text-muted)] text-xs">{activities.filter(a => a.type === 'Gider' && a.status !== 'İptal').length} işlem</p>
+                        </div>
                     </div>
+                    <div className="flex items-end justify-between">
+                        <p className="text-2xl font-bold text-red-400">
+                            -₺{totalExpense.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                        </p>
+                        <span className="flex items-center gap-0.5 text-red-400 text-sm">
+                            <ArrowDownRight className="w-4 h-4" />
+                        </span>
+                    </div>
+                </Card>
+            </div>
+
+            {/* Payments Card - full width */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <Card variant="default" hover className="relative">
                     <div className="flex items-center gap-3 mb-4">
                         <div className="w-10 h-10 rounded-xl bg-[var(--color-bg-secondary)] flex items-center justify-center">
                             <Vault className="w-5 h-5 text-[var(--color-accent-orange)]" />
                         </div>
                         <div>
                             <p className="text-white text-sm font-medium">Toplam Ödemeler</p>
-                            <p className="text-[var(--color-text-muted)] text-xs">Bu Dönem</p>
+                            <p className="text-[var(--color-text-muted)] text-xs">Bakiyeyi azaltır</p>
                         </div>
                     </div>
                     <div className="flex items-end justify-between">
-                        <p className="text-2xl font-bold text-white">
-                            ₺{totalPayments.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                        <p className="text-2xl font-bold text-[var(--color-accent-orange)]">
+                            -₺{totalPayments.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                         </p>
-                        <span className="flex items-center gap-0.5 text-[var(--color-accent-green)] text-sm">
+                        <span className="flex items-center gap-0.5 text-[var(--color-text-secondary)] text-sm">
                             {payments.length} kayıt
                         </span>
                     </div>
-                    <button className="mt-4 text-[var(--color-text-secondary)] text-sm flex items-center gap-2 hover:text-[var(--color-accent-orange)]">
-                        Özet Görüntüle <ArrowUpRight className="w-4 h-4" />
-                    </button>
                 </Card>
-
-                {/* Activities Summary Card */}
                 <Card variant="default" hover className="relative">
-                    <div className="absolute top-4 right-4">
-                        <button className="text-[var(--color-text-muted)] hover:text-white">
-                            <MoreHorizontal className="w-5 h-5" />
-                        </button>
-                    </div>
                     <div className="flex items-center gap-3 mb-4">
                         <div className="w-10 h-10 rounded-xl bg-[var(--color-bg-secondary)] flex items-center justify-center">
-                            <TrendingUp className="w-5 h-5 text-[var(--color-accent-orange)]" />
+                            <Layers className="w-5 h-5 text-[var(--color-accent-orange)]" />
                         </div>
                         <div>
-                            <p className="text-white text-sm font-medium">Aktiviteler</p>
-                            <p className="text-[var(--color-text-muted)] text-xs">Toplam İşlem</p>
+                            <p className="text-white text-sm font-medium">Aktivite Özeti</p>
+                            <p className="text-[var(--color-text-muted)] text-xs">Toplam {activities.length} işlem</p>
                         </div>
                     </div>
                     <div className="flex items-end justify-between">
-                        <p className="text-2xl font-bold text-white">{activities.length}</p>
+                        <p className="text-2xl font-bold text-white">{activities.filter(a => a.status === 'Tamamlandı').length} / {activities.length}</p>
                         <span className="flex items-center gap-0.5 text-[var(--color-accent-green)] text-sm">
-                            {activities.filter(a => a.status === 'Tamamlandı').length} tamamlandı
+                            tamamlandı
                         </span>
                     </div>
-                    <button className="mt-4 text-[var(--color-text-secondary)] text-sm flex items-center gap-2 hover:text-[var(--color-accent-orange)]">
-                        Aktiviteleri Gör <ArrowUpRight className="w-4 h-4" />
-                    </button>
                 </Card>
             </div>
 
@@ -680,10 +713,10 @@ export default function Dashboard() {
                         <thead>
                             <tr className="border-b border-[var(--color-border-glass)]">
                                 <th className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium">Aktivite</th>
-                                <th className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium">Sipariş ID</th>
+                                <th className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium">Tür</th>
                                 <th className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium">Tarih</th>
-                                <th className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium">Saat</th>
                                 <th className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium">Tutar</th>
+                                <th className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium">Not</th>
                                 <th className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium">Durum</th>
                                 <th className="text-left py-3 px-4 text-[var(--color-text-muted)] text-sm font-medium"></th>
                             </tr>
@@ -708,16 +741,30 @@ export default function Dashboard() {
                                 <tr key={act.id} className="border-b border-[var(--color-border-glass)] hover:bg-[var(--color-bg-secondary)] transition-colors">
                                     <td className="py-4 px-4">
                                         <div className="flex items-center gap-3">
-                                            <div className={`w-8 h-8 rounded-lg ${getActivityIcon(act.activity)} flex items-center justify-center`}>
-                                                <Wallet className="w-4 h-4 text-white" />
+                                            <div className={`w-8 h-8 rounded-lg ${act.type === 'Gelir' ? 'bg-emerald-500/20' : 'bg-red-500/20'} flex items-center justify-center`}>
+                                                {act.type === 'Gelir'
+                                                    ? <ArrowUpRight className="w-4 h-4 text-emerald-400" />
+                                                    : <ArrowDownRight className="w-4 h-4 text-red-400" />
+                                                }
                                             </div>
                                             <span className="text-white font-medium">{act.activity}</span>
                                         </div>
                                     </td>
-                                    <td className="py-4 px-4 text-[var(--color-text-secondary)]">{act.orderId || '—'}</td>
+                                    <td className="py-4 px-4">
+                                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${act.type === 'Gelir'
+                                            ? 'text-emerald-400 bg-emerald-500/10'
+                                            : 'text-red-400 bg-red-500/10'
+                                            }`}>
+                                            {act.type === 'Gelir' ? '↑ Gelir' : '↓ Gider'}
+                                        </span>
+                                    </td>
                                     <td className="py-4 px-4 text-[var(--color-text-secondary)]">{formatDate(act.date)}</td>
-                                    <td className="py-4 px-4 text-[var(--color-text-secondary)]">{formatTime(act.time)}</td>
-                                    <td className="py-4 px-4 text-white font-medium">{formatCurrency(act.amount)}</td>
+                                    <td className={`py-4 px-4 font-medium ${act.type === 'Gelir' ? 'text-emerald-400' : 'text-red-400'}`}>
+                                        {act.type === 'Gelir' ? '+' : '-'}{formatCurrency(act.amount)}
+                                    </td>
+                                    <td className="py-4 px-4 text-[var(--color-text-secondary)] max-w-[200px] truncate" title={act.note || ''}>
+                                        {act.note || '—'}
+                                    </td>
                                     <td className="py-4 px-4">
                                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${act.status === 'Tamamlandı'
                                             ? 'text-[var(--color-accent-green)] bg-[var(--color-accent-green)]/10'
@@ -774,12 +821,20 @@ export default function Dashboard() {
                         value={activityForm.activity}
                         onChange={(e) => setActivityForm({ ...activityForm, activity: e.target.value })}
                     />
-                    <Input
-                        label="Sipariş ID"
-                        placeholder="Örn: ORD_001234"
-                        value={activityForm.orderId}
-                        onChange={(e) => setActivityForm({ ...activityForm, orderId: e.target.value })}
-                    />
+                    <div className="grid grid-cols-2 gap-4">
+                        <Select
+                            label="Tür *"
+                            options={typeOptions}
+                            value={activityForm.type}
+                            onChange={(e) => setActivityForm({ ...activityForm, type: e.target.value })}
+                        />
+                        <Input
+                            label="Sipariş ID"
+                            placeholder="Örn: ORD_001234"
+                            value={activityForm.orderId}
+                            onChange={(e) => setActivityForm({ ...activityForm, orderId: e.target.value })}
+                        />
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
                         <Input
                             label="Tarih *"
@@ -801,6 +856,16 @@ export default function Dashboard() {
                         value={activityForm.amount}
                         onChange={(e) => setActivityForm({ ...activityForm, amount: e.target.value })}
                     />
+                    <div>
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5">Not</label>
+                        <textarea
+                            placeholder="Aktivite hakkında not ekleyin..."
+                            value={activityForm.note}
+                            onChange={(e) => setActivityForm({ ...activityForm, note: e.target.value })}
+                            rows={3}
+                            className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-secondary)] text-white text-sm border border-[var(--color-border-glass)] focus:border-[var(--color-accent-orange)] transition-colors placeholder:text-[var(--color-text-muted)] resize-none"
+                        />
+                    </div>
                     <Select
                         label="Durum"
                         options={statusOptions}

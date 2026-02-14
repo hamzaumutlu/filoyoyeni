@@ -162,6 +162,38 @@ function throwSupabaseError(error: any): never {
     throw new Error(message);
 }
 
+// ============================================
+// Auth Session Check - prevents RLS errors when no session
+// ============================================
+let _cachedHasSession: boolean | null = null;
+let _sessionCheckTime = 0;
+const SESSION_CACHE_MS = 30000; // re-check every 30s
+
+async function hasActiveSession(): Promise<boolean> {
+    if (!isSupabaseConfigured() || !supabase) return false;
+    const now = Date.now();
+    if (_cachedHasSession !== null && now - _sessionCheckTime < SESSION_CACHE_MS) {
+        return _cachedHasSession;
+    }
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data } = await (supabase as any).auth.getSession();
+        _cachedHasSession = !!data?.session?.user;
+        _sessionCheckTime = now;
+        return _cachedHasSession;
+    } catch {
+        _cachedHasSession = false;
+        _sessionCheckTime = now;
+        return false;
+    }
+}
+
+// Combined check: Supabase is configured AND has active auth session
+async function canUseSupabase(): Promise<boolean> {
+    if (!isSupabaseConfigured()) return false;
+    return hasActiveSession();
+}
+
 // Ensure the company exists before inserts (auto-creates if needed)
 async function ensureCompanyExists(companyId: string): Promise<string> {
     if (!isSupabaseConfigured()) return companyId;
@@ -997,6 +1029,8 @@ export interface ActivityData {
     companyId: string;
     activity: string;
     orderId?: string;
+    type: 'Gelir' | 'Gider';
+    note?: string;
     date: string;
     time: string;
     amount: number;
@@ -1009,6 +1043,8 @@ const mapActivityFromDb = (row: Record<string, unknown>): ActivityData => ({
     companyId: row.company_id as string,
     activity: row.activity as string,
     orderId: row.order_id as string | undefined,
+    type: (row.type as 'Gelir' | 'Gider') || 'Gelir',
+    note: row.note as string | undefined,
     date: row.date as string,
     time: row.time as string,
     amount: row.amount as number,
@@ -1020,11 +1056,32 @@ const mapActivityToDb = (data: Partial<ActivityData>) => ({
     ...(data.companyId && { company_id: data.companyId }),
     ...(data.activity && { activity: data.activity }),
     ...(data.orderId !== undefined && { order_id: data.orderId || null }),
+    ...(data.type && { type: data.type }),
+    ...(data.note !== undefined && { note: data.note || null }),
     ...(data.date && { date: data.date }),
     ...(data.time && { time: data.time }),
     ...(data.amount !== undefined && { amount: data.amount }),
     ...(data.status && { status: data.status }),
 });
+
+const ACTIVITIES_STORAGE_KEY = 'filoyo_activities';
+
+function loadLocalActivities(): ActivityData[] {
+    try {
+        const stored = localStorage.getItem(ACTIVITIES_STORAGE_KEY);
+        return stored ? JSON.parse(stored) : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveLocalActivities(activities: ActivityData[]): void {
+    try {
+        localStorage.setItem(ACTIVITIES_STORAGE_KEY, JSON.stringify(activities));
+    } catch {
+        console.warn('[Activities] localStorage kaydetme hatası');
+    }
+}
 
 export function useActivitiesSupabase() {
     const { activeCompanyId } = useAuth();
@@ -1034,7 +1091,10 @@ export function useActivitiesSupabase() {
     const [error, setError] = useState<string | null>(null);
 
     const fetchActivities = useCallback(async () => {
-        if (!isSupabaseConfigured()) {
+        const canUse = await canUseSupabase();
+        if (!canUse) {
+            // Load from localStorage in demo mode
+            setActivities(loadLocalActivities());
             setLoading(false);
             return;
         }
@@ -1062,23 +1122,26 @@ export function useActivitiesSupabase() {
     }, [fetchActivities]);
 
     const addActivity = async (activity: Omit<ActivityData, 'id' | 'createdAt' | 'companyId'>) => {
-        if (!isSupabaseConfigured()) {
+        const canUse = await canUseSupabase();
+        if (!canUse) {
+            // Local fallback mode with localStorage persistence
             const newActivity: ActivityData = {
                 id: Date.now().toString(),
                 companyId,
                 ...activity,
                 createdAt: new Date().toISOString(),
             };
-            setActivities((prev) => [newActivity, ...prev]);
+            const updated = [newActivity, ...activities];
+            setActivities(updated);
+            saveLocalActivities(updated);
             return newActivity;
         }
 
         const validCompanyId = await ensureCompanyExists(companyId);
         const dbData = {
             ...mapActivityToDb({ ...activity, companyId: validCompanyId }),
-            company_id: validCompanyId, // explicit - bypasses conditional spread
+            company_id: validCompanyId,
         };
-        console.log('[DEBUG] addActivity payload:', dbData);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
             .from('activities')
@@ -1092,8 +1155,11 @@ export function useActivitiesSupabase() {
     };
 
     const updateActivity = async (id: string, updates: Partial<ActivityData>) => {
-        if (!isSupabaseConfigured()) {
-            setActivities((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)));
+        const canUse = await canUseSupabase();
+        if (!canUse) {
+            const updated = activities.map((a) => (a.id === id ? { ...a, ...updates } : a));
+            setActivities(updated);
+            saveLocalActivities(updated);
             return;
         }
 
@@ -1109,8 +1175,11 @@ export function useActivitiesSupabase() {
     };
 
     const deleteActivity = async (id: string) => {
-        if (!isSupabaseConfigured()) {
-            setActivities((prev) => prev.filter((a) => a.id !== id));
+        const canUse = await canUseSupabase();
+        if (!canUse) {
+            const updated = activities.filter((a) => a.id !== id);
+            setActivities(updated);
+            saveLocalActivities(updated);
             return;
         }
 
